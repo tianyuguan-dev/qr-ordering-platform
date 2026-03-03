@@ -13,13 +13,15 @@ CREATE TABLE restaurant (
     logo_url VARCHAR(255),
     address VARCHAR(255),
     phone VARCHAR(20),
-    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    status INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_restaurant_status CHECK (status IN ('ACTIVE', 'SUSPENDED', 'INACTIVE'))
+    CONSTRAINT chk_restaurant_status CHECK (status IN (1, 2, 3))
 );
 
 CREATE INDEX idx_restaurant_status ON restaurant(status);
+
+COMMENT ON COLUMN restaurant.status IS 'Restaurant status: 1=ACTIVE, 2=SUSPENDED, 3=INACTIVE';
 
 -- Platform administrator table
 CREATE TABLE platform_admin (
