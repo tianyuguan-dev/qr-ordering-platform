@@ -1,0 +1,88 @@
+spring:
+  application:
+    name: qr-ordering-platform
+
+  # Database configuration (connecting to Docker container)
+  datasource:
+    url: jdbc:postgresql://localhost:5433/qr_ordering
+    username: admin
+    password: password
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  # JPA configuration
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate  # Schema managed by Flyway, don't auto-create
+    show-sql: true        # Show SQL in development
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+
+  # Flyway configuration (database version management)
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+
+  # Redis configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+
+# Server configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    com.qrordering: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator configuration (health checks and monitoring)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# Swagger/OpenAPI configuration
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+
+# JWT configuration
+jwt:
+  secret: your-secret-key-change-in-production-min-256-bits-required-for-hs256-algorithm
+  expiration: 86400000  # 24 hours (in milliseconds)

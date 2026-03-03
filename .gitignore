@@ -1,0 +1,46 @@
+# Claude Code configuration (local files, not committed)
+.claude/
+
+# Technical design documents (design drafts, not committed)
+TECH_DESIGN.md
+TECH_DESIGN_V2.md
+FRONTEND_DESIGN.md
+FRONTEND_SIMPLE.md
+
+# IDE configuration
+.vscode/
+.idea/
+*.iml
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Backend (Java/Spring Boot)
+backend/target/
+backend/*.log
+backend/.mvn/
+backend/mvnw
+backend/mvnw.cmd
+
+# Frontend (Vue)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.local
+
+# Environment variables (may contain sensitive information)
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+logs/
+*.log
+
+# Docker
+*.pid
