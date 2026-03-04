@@ -42,15 +42,17 @@ CREATE TABLE restaurant_user (
     tenant_id VARCHAR(50) NOT NULL REFERENCES restaurant(id) ON DELETE CASCADE,
     username VARCHAR(50) NOT NULL,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(20) NOT NULL,
+    role INTEGER NOT NULL,
     email VARCHAR(100),
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_user_role CHECK (role IN ('RESTAURANT_ADMIN', 'WAITER', 'KITCHEN')),
+    CONSTRAINT chk_user_role CHECK (role IN (1, 2, 3)),
     UNIQUE (tenant_id, username)
 );
 
 CREATE INDEX idx_user_tenant ON restaurant_user(tenant_id);
 CREATE INDEX idx_user_username ON restaurant_user(tenant_id, username);
+
+COMMENT ON COLUMN restaurant_user.role IS 'User role: 1=RESTAURANT_ADMIN, 2=WAITER, 3=KITCHEN';
 
 -- Menu category table
 CREATE TABLE category (
@@ -74,17 +76,19 @@ CREATE TABLE menu_item (
     price DECIMAL(10,2) NOT NULL,
     image_url VARCHAR(255),
     allergens VARCHAR(255),
-    status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE',
+    status INTEGER NOT NULL DEFAULT 1,
     version INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_menu_status CHECK (status IN ('AVAILABLE', 'SOLD_OUT', 'INACTIVE')),
+    CONSTRAINT chk_menu_status CHECK (status IN (1, 2, 3)),
     CONSTRAINT chk_menu_price CHECK (price >= 0)
 );
 
 CREATE INDEX idx_menu_tenant ON menu_item(tenant_id);
 CREATE INDEX idx_menu_category ON menu_item(tenant_id, category_id);
 CREATE INDEX idx_menu_status ON menu_item(tenant_id, status);
+
+COMMENT ON COLUMN menu_item.status IS 'Menu item status: 1=AVAILABLE, 2=SOLD_OUT, 3=INACTIVE';
 
 -- Table (dining) information
 CREATE TABLE table_info (
@@ -93,13 +97,15 @@ CREATE TABLE table_info (
     table_number VARCHAR(20) NOT NULL,
     qr_code_url VARCHAR(255),
     seats INT DEFAULT 4,
-    status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE',
+    status INTEGER NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_table_status CHECK (status IN ('AVAILABLE', 'OCCUPIED', 'RESERVED')),
+    CONSTRAINT chk_table_status CHECK (status IN (1, 2, 3)),
     UNIQUE (tenant_id, table_number)
 );
 
 CREATE INDEX idx_table_tenant ON table_info(tenant_id);
+
+COMMENT ON COLUMN table_info.status IS 'Table status: 1=AVAILABLE, 2=OCCUPIED, 3=RESERVED';
 
 -- Order master table
 CREATE TABLE order_info (
@@ -107,13 +113,13 @@ CREATE TABLE order_info (
     tenant_id VARCHAR(50) NOT NULL REFERENCES restaurant(id) ON DELETE CASCADE,
     table_id BIGINT NOT NULL REFERENCES table_info(id) ON DELETE RESTRICT,
     order_number VARCHAR(50) NOT NULL UNIQUE,
-    status VARCHAR(20) NOT NULL,
+    status INTEGER NOT NULL,
     total_amount DECIMAL(10,2) NOT NULL,
     customer_notes TEXT,
     version INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_order_status CHECK (status IN ('CREATED', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED')),
+    CONSTRAINT chk_order_status CHECK (status IN (1, 2, 3, 4, 5, 6, 7)),
     CONSTRAINT chk_order_amount CHECK (total_amount >= 0)
 );
 
@@ -122,6 +128,8 @@ CREATE INDEX idx_order_table ON order_info(tenant_id, table_id);
 CREATE INDEX idx_order_status ON order_info(tenant_id, status);
 CREATE INDEX idx_order_created ON order_info(tenant_id, created_at DESC);
 CREATE INDEX idx_order_number ON order_info(order_number);
+
+COMMENT ON COLUMN order_info.status IS 'Order status: 1=CREATED, 2=CONFIRMED, 3=PREPARING, 4=READY, 5=SERVED, 6=COMPLETED, 7=CANCELLED';
 
 -- Order item detail table
 CREATE TABLE order_item (
@@ -169,18 +177,20 @@ CREATE TABLE outbox_events (
     tenant_id VARCHAR(50) NOT NULL,
     aggregate_id BIGINT NOT NULL,
     payload JSONB NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'NEW',
+    status INTEGER NOT NULL DEFAULT 1,
     attempt_count INT NOT NULL DEFAULT 0,
     next_retry_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     processed_at TIMESTAMP,
     error_message TEXT,
-    CONSTRAINT chk_outbox_status CHECK (status IN ('NEW', 'PROCESSING', 'SENT', 'DEAD'))
+    CONSTRAINT chk_outbox_status CHECK (status IN (1, 2, 3, 4))
 );
 
-CREATE INDEX idx_outbox_status_retry ON outbox_events(status, next_retry_at) WHERE status = 'NEW';
+CREATE INDEX idx_outbox_status_retry ON outbox_events(status, next_retry_at) WHERE status = 1;
 CREATE INDEX idx_outbox_tenant ON outbox_events(tenant_id);
 CREATE INDEX idx_outbox_event_id ON outbox_events(event_id);
+
+COMMENT ON COLUMN outbox_events.status IS 'Outbox status: 1=NEW, 2=PROCESSING, 3=SENT, 4=DEAD';
 
 -- Processed events table (consumer-side idempotency deduplication)
 CREATE TABLE processed_events (
