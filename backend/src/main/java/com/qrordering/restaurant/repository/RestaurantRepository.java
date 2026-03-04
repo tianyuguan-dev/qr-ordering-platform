@@ -27,6 +27,16 @@ public interface RestaurantRepository extends JpaRepository<Restaurant, String> 
     Page<Restaurant> findByStatus(RestaurantStatus status, Pageable pageable);
 
     /**
+     * Find restaurants by name containing (case-insensitive) with pagination
+     */
+    Page<Restaurant> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+    /**
+     * Find restaurants by status and name containing (case-insensitive) with pagination
+     */
+    Page<Restaurant> findByStatusAndNameContainingIgnoreCase(RestaurantStatus status, String name, Pageable pageable);
+
+    /**
      * Check if restaurant with given name exists
      */
     boolean existsByNameIgnoreCase(String name);

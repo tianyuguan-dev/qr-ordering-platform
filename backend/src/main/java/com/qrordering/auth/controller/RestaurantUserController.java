@@ -1,6 +1,8 @@
 package com.qrordering.auth.controller;
 
 import com.qrordering.auth.dto.request.CreateRestaurantUserRequest;
+import com.qrordering.auth.dto.request.ResetRestaurantUserPasswordRequest;
+import com.qrordering.auth.dto.request.UpdateRestaurantUserRequest;
 import com.qrordering.auth.dto.response.RestaurantUserResponse;
 import com.qrordering.auth.service.RestaurantUserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,5 +48,36 @@ public class RestaurantUserController {
             @Valid @RequestBody CreateRestaurantUserRequest request) {
         RestaurantUserResponse response = restaurantUserService.createUser(tenantId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PutMapping("/{userId}")
+    @PreAuthorize("hasRole('RESTAURANT_ADMIN') or hasRole('PLATFORM_ADMIN')")
+    @Operation(summary = "Update staff user", description = "Update email and/or role")
+    public ResponseEntity<RestaurantUserResponse> updateUser(
+            @PathVariable String tenantId,
+            @Parameter(description = "Staff user ID") @PathVariable Long userId,
+            @Valid @RequestBody UpdateRestaurantUserRequest request) {
+        return ResponseEntity.ok(restaurantUserService.updateUser(tenantId, userId, request));
+    }
+
+    @DeleteMapping("/{userId}")
+    @PreAuthorize("hasRole('RESTAURANT_ADMIN') or hasRole('PLATFORM_ADMIN')")
+    @Operation(summary = "Delete staff user", description = "Cannot delete yourself")
+    public ResponseEntity<Void> deleteUser(
+            @PathVariable String tenantId,
+            @Parameter(description = "Staff user ID") @PathVariable Long userId) {
+        restaurantUserService.deleteUser(tenantId, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{userId}/reset-password")
+    @PreAuthorize("hasRole('RESTAURANT_ADMIN') or hasRole('PLATFORM_ADMIN')")
+    @Operation(summary = "Reset staff password", description = "Cannot reset own (use change-password)")
+    public ResponseEntity<Void> resetPassword(
+            @PathVariable String tenantId,
+            @Parameter(description = "Staff user ID") @PathVariable Long userId,
+            @Valid @RequestBody ResetRestaurantUserPasswordRequest request) {
+        restaurantUserService.resetPassword(tenantId, userId, request);
+        return ResponseEntity.noContent().build();
     }
 }

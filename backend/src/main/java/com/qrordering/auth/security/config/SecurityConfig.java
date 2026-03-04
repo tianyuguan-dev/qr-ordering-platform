@@ -74,17 +74,26 @@ public class SecurityConfig {
                 // Auth: login etc. - no token required
                 .requestMatchers("/auth/**").permitAll()
 
-                // Restaurant: only platform admin can create/update/delete; GET allowed for all
+                // Restaurant: my-restaurant (restaurant admin only; waiter/kitchen cannot edit)
+                .requestMatchers(HttpMethod.GET, "/restaurants/me").hasRole("RESTAURANT_ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/restaurants/me").hasRole("RESTAURANT_ADMIN")
+                // Restaurant: only platform admin can create/update/delete/list
                 .requestMatchers(HttpMethod.POST, "/restaurants").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/restaurants/*").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/restaurants/*").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.GET, "/restaurants", "/restaurants/*").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.GET, "/restaurants/*/users").authenticated()
                 .requestMatchers(HttpMethod.POST, "/restaurants/*/users").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/restaurants/*/users/*").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/restaurants/*/users/*").authenticated()
+                .requestMatchers(HttpMethod.POST, "/restaurants/*/users/*/reset-password").authenticated()
 
                 // Platform admin management: only platform admin can list and create
                 .requestMatchers(HttpMethod.GET, "/platform-admins").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/platform-admins").hasRole("PLATFORM_ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/platform-admins/*").hasRole("PLATFORM_ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/platform-admins/*").hasRole("PLATFORM_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/platform-admins/*/reset-password").hasRole("PLATFORM_ADMIN")
 
                 // All other requests require authenticated user
                 .anyRequest().authenticated()

@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getPlatformAdmins, createPlatformAdmin } from '../api/users'
+import { getPlatformAdmins, createPlatformAdmin, updatePlatformAdmin, deletePlatformAdmin, resetPlatformAdminPassword } from '../api/users'
 import { setToken } from '../api/client'
+import { toast } from '../utils/toast'
 
 const router = useRouter()
 const list = ref([])
@@ -12,6 +13,19 @@ const modalOpen = ref(false)
 const form = ref({ username: '', password: '', email: '' })
 const formError = ref('')
 const submitLoading = ref(false)
+
+const user = computed(() => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null')
+  } catch (_) {
+    return null
+  }
+})
+const currentUserId = computed(() => user.value?.userId ?? null)
+
+const editModal = ref({ open: false, id: null, email: '', error: '', loading: false })
+const deleteConfirm = ref(null)
+const resetPwdModal = ref({ open: false, id: null, username: '', newPassword: '', error: '', loading: false })
 
 async function loadList() {
   loading.value = true
@@ -62,6 +76,7 @@ async function submitForm() {
       password: form.value.password,
       email: form.value.email?.trim() || undefined,
     })
+    toast('Created')
     closeModal()
     await loadList()
   } catch (e) {
@@ -77,6 +92,72 @@ function formatDate(s) {
     return new Date(s).toLocaleString()
   } catch (_) {
     return s
+  }
+}
+
+function openEdit(a) {
+  editModal.value = { open: true, id: a.id, email: a.email || '', error: '', loading: false }
+}
+function closeEditModal() {
+  editModal.value.open = false
+}
+async function submitEdit() {
+  editModal.value.error = ''
+  editModal.value.loading = true
+  try {
+    await updatePlatformAdmin(editModal.value.id, { email: editModal.value.email?.trim() || undefined })
+    toast('Saved')
+    closeEditModal()
+    await loadList()
+  } catch (e) {
+    editModal.value.error = e.message || 'Update failed'
+  } finally {
+    editModal.value.loading = false
+  }
+}
+
+function askDelete(a) {
+  deleteConfirm.value = { id: a.id, username: a.username }
+}
+function cancelDelete() {
+  deleteConfirm.value = null
+}
+async function confirmDelete() {
+  if (!deleteConfirm.value) return
+  const { id } = deleteConfirm.value
+  deleteConfirm.value = null
+  try {
+    await deletePlatformAdmin(id)
+    toast('Deleted')
+    await loadList()
+  } catch (e) {
+    error.value = e.message || 'Delete failed'
+  }
+}
+
+function openResetPwd(a) {
+  resetPwdModal.value = { open: true, id: a.id, username: a.username, newPassword: '', error: '', loading: false }
+}
+function closeResetPwdModal() {
+  resetPwdModal.value.open = false
+}
+async function submitResetPwd() {
+  const m = resetPwdModal.value
+  m.error = ''
+  if (!m.newPassword || m.newPassword.length < 6) {
+    m.error = 'Password must be at least 6 characters'
+    return
+  }
+  m.loading = true
+  try {
+    await resetPlatformAdminPassword(m.id, { newPassword: m.newPassword })
+    toast('Password reset')
+    closeResetPwdModal()
+    await loadList()
+  } catch (e) {
+    m.error = e.message || 'Reset failed'
+  } finally {
+    m.loading = false
   }
 }
 
@@ -100,6 +181,7 @@ onMounted(loadList)
             <th>Username</th>
             <th>Email</th>
             <th>Created at</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -108,6 +190,11 @@ onMounted(loadList)
             <td>{{ a.username }}</td>
             <td>{{ a.email || '-' }}</td>
             <td>{{ formatDate(a.createdAt) }}</td>
+            <td class="actions">
+              <button type="button" class="btn small" @click="openEdit(a)">Edit</button>
+              <button type="button" class="btn small" :disabled="a.id === currentUserId" @click="openResetPwd(a)" :title="a.id === currentUserId ? 'Use Profile to change your password' : ''">Reset password</button>
+              <button type="button" class="btn small danger" :disabled="a.id === currentUserId" @click="askDelete(a)" :title="a.id === currentUserId ? 'Cannot delete yourself' : ''">Delete</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -140,6 +227,52 @@ onMounted(loadList)
         </form>
       </div>
     </div>
+
+    <div v-if="editModal.open" class="modal-overlay" @click.self="closeEditModal">
+      <div class="modal">
+        <h2>Edit Platform Admin</h2>
+        <form @submit.prevent="submitEdit">
+          <div class="field">
+            <label>Email</label>
+            <input v-model="editModal.email" type="text" placeholder="Email" />
+          </div>
+          <p v-if="editModal.error" class="form-error">{{ editModal.error }}</p>
+          <div class="modal-actions">
+            <button type="button" class="btn secondary" @click="closeEditModal">Cancel</button>
+            <button type="submit" class="btn primary" :disabled="editModal.loading">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div v-if="deleteConfirm" class="modal-overlay" @click.self="cancelDelete">
+      <div class="modal">
+        <h2>Confirm delete</h2>
+        <p>Delete platform admin &quot;{{ deleteConfirm.username }}&quot;?</p>
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" @click="cancelDelete">Cancel</button>
+          <button type="button" class="btn danger" @click="confirmDelete">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="resetPwdModal.open" class="modal-overlay" @click.self="closeResetPwdModal">
+      <div class="modal">
+        <h2>Reset password</h2>
+        <p class="modal-subtitle">For: {{ resetPwdModal.username }}</p>
+        <form @submit.prevent="submitResetPwd">
+          <div class="field">
+            <label>New password <span class="required">*</span></label>
+            <input v-model="resetPwdModal.newPassword" type="password" placeholder="Min 6 characters" />
+          </div>
+          <p v-if="resetPwdModal.error" class="form-error">{{ resetPwdModal.error }}</p>
+          <div class="modal-actions">
+            <button type="button" class="btn secondary" @click="closeResetPwdModal">Cancel</button>
+            <button type="submit" class="btn primary" :disabled="resetPwdModal.loading">Reset</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -164,11 +297,18 @@ onMounted(loadList)
 }
 .table th, .table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #eee; }
 .table th { background: #f5f5f5; font-weight: 600; font-size: 0.875rem; }
+.table td.actions { white-space: nowrap; }
+.table td.actions .btn + .btn { margin-left: 0.35rem; }
 .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; }
+.btn.small { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
 .btn.primary { background: #646cff; color: #fff; }
 .btn.primary:hover:not(:disabled) { background: #535bf2; }
 .btn.secondary { background: #e0e0e0; color: #333; }
 .btn.secondary:hover:not(:disabled) { background: #d0d0d0; }
+.btn.danger { background: #dc3545; color: #fff; }
+.btn.danger:hover:not(:disabled) { background: #c82333; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.modal-subtitle { margin: -0.5rem 0 1rem; font-size: 0.875rem; color: #666; }
 .required { color: #c33; }
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;

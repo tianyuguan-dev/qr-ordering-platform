@@ -25,6 +25,11 @@ export async function apiFetch(path, options = {}) {
 
   const res = await fetch(url, { ...options, headers })
   if (!res.ok) {
+    if (res.status === 401) {
+      setToken(null)
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+    }
     let message = await res.text()
     try {
       const j = JSON.parse(message)

@@ -9,10 +9,14 @@ import com.qrordering.restaurant.dto.response.RestaurantResponse;
 import com.qrordering.restaurant.entity.Restaurant;
 import com.qrordering.restaurant.enums.RestaurantStatus;
 import com.qrordering.restaurant.repository.RestaurantRepository;
+import com.qrordering.auth.enums.UserRole;
+import com.qrordering.auth.security.RestaurantUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,6 +71,39 @@ public class RestaurantService {
     }
 
     /**
+     * Get current user's restaurant (restaurant admin only).
+     * Platform admin cannot use this; they should use GET /restaurants/{id}.
+     */
+    @Transactional(readOnly = true)
+    public RestaurantResponse getCurrentUserRestaurant() {
+        var principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!(principal instanceof RestaurantUserDetails r) || r.getRole() != UserRole.RESTAURANT_ADMIN) {
+            throw new AccessDeniedException("Only restaurant admin can access own restaurant");
+        }
+        return getRestaurant(r.getTenantId());
+    }
+
+    /**
+     * Update current user's restaurant (restaurant admin only).
+     * Status cannot be changed by restaurant admin.
+     */
+    @Transactional
+    public RestaurantResponse updateCurrentUserRestaurant(UpdateRestaurantRequest request) {
+        var principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (!(principal instanceof RestaurantUserDetails r) || r.getRole() != UserRole.RESTAURANT_ADMIN) {
+            throw new AccessDeniedException("Only restaurant admin can update own restaurant");
+        }
+        UpdateRestaurantRequest withoutStatus = UpdateRestaurantRequest.builder()
+                .name(request.getName())
+                .description(request.getDescription())
+                .logoUrl(request.getLogoUrl())
+                .address(request.getAddress())
+                .phone(request.getPhone())
+                .build();
+        return updateRestaurant(r.getTenantId(), withoutStatus);
+    }
+
+    /**
      * Get restaurant by ID
      */
     @Transactional(readOnly = true)
@@ -80,25 +117,36 @@ public class RestaurantService {
     }
 
     /**
-     * Get all restaurants with pagination
+     * Get all restaurants with optional status and name filter, with pagination
      */
     @Transactional(readOnly = true)
-    public Page<RestaurantResponse> getAllRestaurants(Pageable pageable) {
-        log.debug("Fetching all restaurants with pagination: {}", pageable);
+    public Page<RestaurantResponse> getAllRestaurants(Integer statusCode, String name, Pageable pageable) {
+        log.debug("Fetching restaurants with status={}, name={}, pagination: {}", statusCode, name, pageable);
 
+        if (statusCode != null && name != null && !name.trim().isEmpty()) {
+            RestaurantStatus status = RestaurantStatus.fromCode(statusCode);
+            return restaurantRepository.findByStatusAndNameContainingIgnoreCase(status, name.trim(), pageable)
+                    .map(restaurantConverter::toResponse);
+        }
+        if (statusCode != null) {
+            RestaurantStatus status = RestaurantStatus.fromCode(statusCode);
+            return restaurantRepository.findByStatus(status, pageable)
+                    .map(restaurantConverter::toResponse);
+        }
+        if (name != null && !name.trim().isEmpty()) {
+            return restaurantRepository.findByNameContainingIgnoreCase(name.trim(), pageable)
+                    .map(restaurantConverter::toResponse);
+        }
         return restaurantRepository.findAll(pageable)
                 .map(restaurantConverter::toResponse);
     }
 
     /**
-     * Get restaurants by status with pagination
+     * Get restaurants by status with pagination (convenience for single filter)
      */
     @Transactional(readOnly = true)
     public Page<RestaurantResponse> getRestaurantsByStatus(RestaurantStatus status, Pageable pageable) {
-        log.debug("Fetching restaurants with status {} and pagination: {}", status, pageable);
-
-        return restaurantRepository.findByStatus(status, pageable)
-                .map(restaurantConverter::toResponse);
+        return getAllRestaurants(status.getCode(), null, pageable);
     }
 
     /**

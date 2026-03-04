@@ -2,8 +2,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getRestaurants } from '../api/restaurants'
-import { getRestaurantUsers, createRestaurantUser } from '../api/users'
+import { getRestaurantUsers, createRestaurantUser, updateRestaurantUser, deleteRestaurantUser, resetRestaurantUserPassword } from '../api/users'
 import { setToken } from '../api/client'
+import { toast } from '../utils/toast'
 
 const router = useRouter()
 const route = useRoute()
@@ -15,6 +16,8 @@ const user = computed(() => {
   }
 })
 const isPlatformAdmin = computed(() => user.value?.roleName === 'PLATFORM_ADMIN')
+// When current user is a restaurant user, their userId is the staff (restaurant_user) id
+const currentStaffUserId = computed(() => (isPlatformAdmin.value ? null : user.value?.userId ?? null))
 
 const restaurantList = ref([])
 const selectedRestaurantId = ref('')
@@ -103,10 +106,15 @@ watch(selectedRestaurantId, () => {
   if (isPlatformAdmin.value) onSelectRestaurant()
 })
 
-const addAdminModal = ref({ open: false, username: '', password: '', email: '', error: '', loading: false })
+const STAFF_ROLES = [
+  { value: 1, label: 'Restaurant Admin' },
+  { value: 2, label: 'Waiter' },
+  { value: 3, label: 'Kitchen' },
+]
+const addAdminModal = ref({ open: false, username: '', password: '', email: '', role: 1, error: '', loading: false })
 
 function openAddAdmin() {
-  addAdminModal.value = { open: true, username: '', password: '', email: '', error: '', loading: false }
+  addAdminModal.value = { open: true, username: '', password: '', email: '', role: 1, error: '', loading: false }
 }
 
 function closeAddAdminModal() {
@@ -132,9 +140,10 @@ async function submitAddAdmin() {
     await createRestaurantUser(tenantId, {
       username: m.username.trim(),
       password: m.password,
-      role: 1,
+      role: m.role,
       email: m.email?.trim() || undefined,
     })
+    toast('Staff added')
     closeAddAdminModal()
   } catch (e) {
     m.error = e.message || (e.status === 403 ? 'Access denied' : 'Failed to create admin')
@@ -149,6 +158,85 @@ function formatDate(s) {
     return new Date(s).toLocaleString()
   } catch (_) {
     return s
+  }
+}
+
+const editModal = ref({ open: false, id: null, username: '', email: '', role: 1, error: '', loading: false })
+const deleteConfirm = ref(null)
+const resetPwdModal = ref({ open: false, id: null, username: '', newPassword: '', error: '', loading: false })
+
+function openEdit(u) {
+  editModal.value = { open: true, id: u.id, username: u.username, email: u.email || '', role: u.role?.code ?? 1, error: '', loading: false }
+}
+function closeEditModal() {
+  editModal.value.open = false
+}
+async function submitEdit() {
+  const tenantId = effectiveTenantId.value
+  if (!tenantId || !editModal.value.id) return
+  editModal.value.error = ''
+  editModal.value.loading = true
+  try {
+    await updateRestaurantUser(tenantId, editModal.value.id, {
+      email: editModal.value.email?.trim() || undefined,
+      role: editModal.value.role,
+    })
+    toast('Saved')
+    closeEditModal()
+    await loadStaffList()
+  } catch (e) {
+    editModal.value.error = e.message || 'Update failed'
+  } finally {
+    editModal.value.loading = false
+  }
+}
+
+function askDelete(u) {
+  deleteConfirm.value = { id: u.id, username: u.username }
+}
+function cancelDelete() {
+  deleteConfirm.value = null
+}
+async function confirmDelete() {
+  if (!deleteConfirm.value) return
+  const tenantId = effectiveTenantId.value
+  const { id } = deleteConfirm.value
+  deleteConfirm.value = null
+  if (!tenantId) return
+  try {
+    await deleteRestaurantUser(tenantId, id)
+    toast('Deleted')
+    await loadStaffList()
+  } catch (e) {
+    error.value = e.message || 'Delete failed'
+  }
+}
+
+function openResetPwd(u) {
+  resetPwdModal.value = { open: true, id: u.id, username: u.username, newPassword: '', error: '', loading: false }
+}
+function closeResetPwdModal() {
+  resetPwdModal.value.open = false
+}
+async function submitResetPwd() {
+  const tenantId = effectiveTenantId.value
+  const m = resetPwdModal.value
+  if (!tenantId || !m.id) return
+  m.error = ''
+  if (!m.newPassword || m.newPassword.length < 6) {
+    m.error = 'Password must be at least 6 characters'
+    return
+  }
+  m.loading = true
+  try {
+    await resetRestaurantUserPassword(tenantId, m.id, { newPassword: m.newPassword })
+    toast('Password reset')
+    closeResetPwdModal()
+    await loadStaffList()
+  } catch (e) {
+    m.error = e.message || 'Reset failed'
+  } finally {
+    m.loading = false
   }
 }
 
@@ -217,6 +305,7 @@ onMounted(async () => {
               <th>Role</th>
               <th>Email</th>
               <th>Created</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -225,6 +314,11 @@ onMounted(async () => {
               <td>{{ u.role?.name ?? '-' }}</td>
               <td>{{ u.email || '-' }}</td>
               <td>{{ formatDate(u.createdAt) }}</td>
+              <td class="actions">
+                <button type="button" class="btn small" @click="openEdit(u)">Edit</button>
+                <button type="button" class="btn small" :disabled="u.id === currentStaffUserId" :title="u.id === currentStaffUserId ? 'Use Profile to change your password' : ''" @click="openResetPwd(u)">Reset password</button>
+                <button type="button" class="btn small danger" :disabled="u.id === currentStaffUserId" :title="u.id === currentStaffUserId ? 'Cannot delete yourself' : ''" @click="askDelete(u)">Delete</button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -239,6 +333,59 @@ onMounted(async () => {
     </template>
 
     <!-- Add Admin Modal -->
+    <div v-if="editModal.open" class="modal-overlay" @click.self="closeEditModal">
+      <div class="modal">
+        <h2>Edit Staff</h2>
+        <p class="modal-subtitle">{{ editModal.username }}</p>
+        <form @submit.prevent="submitEdit">
+          <div class="field">
+            <label>Role</label>
+            <select v-model.number="editModal.role" class="field-select">
+              <option v-for="r in STAFF_ROLES" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Email</label>
+            <input v-model="editModal.email" type="text" placeholder="Email" />
+          </div>
+          <p v-if="editModal.error" class="form-error">{{ editModal.error }}</p>
+          <div class="modal-actions">
+            <button type="button" class="btn secondary" @click="closeEditModal">Cancel</button>
+            <button type="submit" class="btn primary" :disabled="editModal.loading">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div v-if="deleteConfirm" class="modal-overlay" @click.self="cancelDelete">
+      <div class="modal">
+        <h2>Confirm delete</h2>
+        <p>Delete staff &quot;{{ deleteConfirm.username }}&quot;?</p>
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" @click="cancelDelete">Cancel</button>
+          <button type="button" class="btn danger" @click="confirmDelete">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="resetPwdModal.open" class="modal-overlay" @click.self="closeResetPwdModal">
+      <div class="modal">
+        <h2>Reset password</h2>
+        <p class="modal-subtitle">For: {{ resetPwdModal.username }}</p>
+        <form @submit.prevent="submitResetPwd">
+          <div class="field">
+            <label>New password <span class="required">*</span></label>
+            <input v-model="resetPwdModal.newPassword" type="password" placeholder="Min 6 characters" />
+          </div>
+          <p v-if="resetPwdModal.error" class="form-error">{{ resetPwdModal.error }}</p>
+          <div class="modal-actions">
+            <button type="button" class="btn secondary" @click="closeResetPwdModal">Cancel</button>
+            <button type="submit" class="btn primary" :disabled="resetPwdModal.loading">Reset</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div v-if="addAdminModal.open" class="modal-overlay" @click.self="closeAddAdminModal">
       <div class="modal">
         <h2>Add Staff</h2>
@@ -253,6 +400,12 @@ onMounted(async () => {
           <div class="field">
             <label>Password <span class="required">*</span></label>
             <input v-model="addAdminModal.password" type="password" placeholder="Min 6 characters" />
+          </div>
+          <div class="field">
+            <label>Role</label>
+            <select v-model.number="addAdminModal.role" class="field-select">
+              <option v-for="r in STAFF_ROLES" :key="r.value" :value="r.value">{{ r.label }}</option>
+            </select>
           </div>
           <div class="field">
             <label>Email</label>
@@ -360,6 +513,12 @@ onMounted(async () => {
 }
 .btn.primary { background: #646cff; color: #fff; }
 .btn.primary:hover:not(:disabled) { background: #535bf2; }
+.btn.danger { background: #dc3545; color: #fff; }
+.btn.danger:hover:not(:disabled) { background: #c82333; }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.table td.actions { white-space: nowrap; }
+.table td.actions .btn + .btn { margin-left: 0.35rem; }
+.required { color: #c33; }
 .btn.secondary { background: #e0e0e0; color: #333; }
 .btn.secondary:hover:not(:disabled) { background: #d0d0d0; }
 .btn.small { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
@@ -399,12 +558,16 @@ onMounted(async () => {
   margin-bottom: 0.35rem;
   font-size: 0.875rem;
 }
-.modal .field input {
+.modal .field input,
+.modal .field select.field-select {
   width: 100%;
   padding: 0.5rem 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 0.9rem;
+}
+.modal .field select.field-select {
+  cursor: pointer;
 }
 .form-error {
   color: #c33;

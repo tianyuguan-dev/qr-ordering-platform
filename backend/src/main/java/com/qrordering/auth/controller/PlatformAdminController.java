@@ -1,10 +1,13 @@
 package com.qrordering.auth.controller;
 
 import com.qrordering.auth.dto.request.CreatePlatformAdminRequest;
+import com.qrordering.auth.dto.request.ResetPlatformAdminPasswordRequest;
+import com.qrordering.auth.dto.request.UpdatePlatformAdminRequest;
 import com.qrordering.auth.dto.response.PlatformAdminResponse;
 import com.qrordering.auth.entity.PlatformAdmin;
 import com.qrordering.auth.service.PlatformAdminService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -47,5 +50,33 @@ public class PlatformAdminController {
                 .createdAt(admin.getCreatedAt())
                 .build();
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @Operation(summary = "Update platform admin", description = "Update email (username immutable)")
+    public ResponseEntity<PlatformAdminResponse> updatePlatformAdmin(
+            @Parameter(description = "Platform admin ID") @PathVariable Long id,
+            @Valid @RequestBody UpdatePlatformAdminRequest request) {
+        return ResponseEntity.ok(platformAdminService.update(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @Operation(summary = "Delete platform admin", description = "Cannot delete self or last admin")
+    public ResponseEntity<Void> deletePlatformAdmin(
+            @Parameter(description = "Platform admin ID") @PathVariable Long id) {
+        platformAdminService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/reset-password")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @Operation(summary = "Reset password", description = "Reset another admin's password (not own)")
+    public ResponseEntity<Void> resetPassword(
+            @Parameter(description = "Platform admin ID") @PathVariable Long id,
+            @Valid @RequestBody ResetPlatformAdminPasswordRequest request) {
+        platformAdminService.resetPassword(id, request);
+        return ResponseEntity.noContent().build();
     }
 }

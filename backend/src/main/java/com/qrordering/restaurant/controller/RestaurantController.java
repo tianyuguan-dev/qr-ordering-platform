@@ -42,6 +42,25 @@ public class RestaurantController {
     }
 
     /**
+     * Get current user's restaurant (restaurant admin only).
+     */
+    @GetMapping("/me")
+    @Operation(summary = "Get my restaurant", description = "Restaurant admin retrieves own restaurant details")
+    public ResponseEntity<RestaurantResponse> getMyRestaurant() {
+        return ResponseEntity.ok(restaurantService.getCurrentUserRestaurant());
+    }
+
+    /**
+     * Update current user's restaurant (restaurant admin only). Status cannot be changed.
+     */
+    @PutMapping("/me")
+    @Operation(summary = "Update my restaurant", description = "Restaurant admin updates own restaurant (name, description, address, etc.)")
+    public ResponseEntity<RestaurantResponse> updateMyRestaurant(
+            @Valid @RequestBody UpdateRestaurantRequest request) {
+        return ResponseEntity.ok(restaurantService.updateCurrentUserRestaurant(request));
+    }
+
+    /**
      * Get restaurant by ID
      */
     @GetMapping("/{id}")
@@ -54,13 +73,15 @@ public class RestaurantController {
     }
 
     /**
-     * Get all restaurants with pagination
+     * Get all restaurants with optional status and name filter, with pagination
      */
     @GetMapping
-    @Operation(summary = "List restaurants", description = "Get all restaurants with pagination")
+    @Operation(summary = "List restaurants", description = "Get restaurants with optional status (1=ACTIVE,2=SUSPENDED,3=INACTIVE) and name search")
     public ResponseEntity<Page<RestaurantResponse>> getAllRestaurants(
+            @Parameter(description = "Status code filter") @RequestParam(required = false) Integer status,
+            @Parameter(description = "Name search (partial match)") @RequestParam(required = false) String name,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
-        Page<RestaurantResponse> restaurants = restaurantService.getAllRestaurants(pageable);
+        Page<RestaurantResponse> restaurants = restaurantService.getAllRestaurants(status, name, pageable);
         return ResponseEntity.ok(restaurants);
     }
 

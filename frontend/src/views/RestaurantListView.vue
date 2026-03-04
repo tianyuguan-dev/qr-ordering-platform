@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getRestaurants, createRestaurant, updateRestaurant, deleteRestaurant } from '../api/restaurants'
 import { setToken } from '../api/client'
+import { toast } from '../utils/toast'
 
 const STATUS_OPTIONS = [
   { value: 1, label: 'ACTIVE' },
@@ -16,6 +17,8 @@ const totalElements = ref(0)
 const totalPages = ref(0)
 const page = ref(0)
 const size = 20
+const statusFilter = ref(null) // null = all, 1/2/3 = ACTIVE/SUSPENDED/INACTIVE
+const searchName = ref('')
 const loading = ref(false)
 const error = ref('')
 const modalOpen = ref(false)
@@ -38,7 +41,12 @@ async function loadList() {
   loading.value = true
   error.value = ''
   try {
-    const res = await getRestaurants({ page: page.value, size })
+    const res = await getRestaurants({
+      page: page.value,
+      size,
+      status: statusFilter.value ?? undefined,
+      name: searchName.value?.trim() || undefined,
+    })
     list.value = res.content || []
     totalElements.value = res.totalElements ?? 0
     totalPages.value = res.totalPages ?? 0
@@ -107,6 +115,7 @@ async function submitForm() {
         phone: form.value.phone?.trim() || undefined,
       })
     }
+    toast(modalEdit.value ? 'Updated' : 'Created')
     closeModal()
     await loadList()
   } catch (e) {
@@ -130,6 +139,7 @@ async function confirmDelete() {
   deleteConfirm.value = null
   try {
     await deleteRestaurant(id)
+    toast('Deleted')
     await loadList()
   } catch (e) {
     error.value = e.message || (e.status === 403 ? 'Access denied' : 'Delete failed')
@@ -138,6 +148,17 @@ async function confirmDelete() {
 
 function goToStaff(r) {
   router.push({ path: '/staff', query: { restaurant: r.id } })
+}
+
+function setStatus(s) {
+  statusFilter.value = s
+  page.value = 0
+  loadList()
+}
+
+function onSearch() {
+  page.value = 0
+  loadList()
 }
 
 onMounted(loadList)
@@ -155,6 +176,19 @@ onMounted(loadList)
     </header>
 
     <p v-if="error" class="error">{{ error }}</p>
+
+    <div v-if="isPlatformAdmin" class="filters">
+      <div class="status-tabs">
+        <button type="button" class="tab" :class="{ active: statusFilter === null }" @click="setStatus(null)">All</button>
+        <button type="button" class="tab" :class="{ active: statusFilter === 1 }" @click="setStatus(1)">ACTIVE</button>
+        <button type="button" class="tab" :class="{ active: statusFilter === 2 }" @click="setStatus(2)">SUSPENDED</button>
+        <button type="button" class="tab" :class="{ active: statusFilter === 3 }" @click="setStatus(3)">INACTIVE</button>
+      </div>
+      <div class="search-row">
+        <input v-model="searchName" type="text" placeholder="Search by name..." class="search-input" @keyup.enter="onSearch" />
+        <button type="button" class="btn small" @click="onSearch">Search</button>
+      </div>
+    </div>
 
     <div v-if="loading" class="loading">Loading...</div>
     <template v-else>
@@ -289,6 +323,40 @@ onMounted(loadList)
 .user-info {
   font-size: 0.875rem;
   color: #666;
+}
+.filters {
+  margin-bottom: 1rem;
+}
+.status-tabs {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+.tab {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.tab:hover { background: #f5f5f5; }
+.tab.active {
+  background: #646cff;
+  color: #fff;
+  border-color: #646cff;
+}
+.search-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.search-input {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  width: 220px;
 }
 .error {
   padding: 0.75rem;
