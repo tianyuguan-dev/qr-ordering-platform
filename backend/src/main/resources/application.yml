@@ -86,3 +86,10 @@ springdoc:
 jwt:
   secret: your-secret-key-change-in-production-min-256-bits-required-for-hs256-algorithm
   expiration: 86400000  # 24 hours (in milliseconds)
+
+# First platform admin (created when none exist). Set platform.bootstrap.enabled=false in production if you manage admin elsewhere.
+platform:
+  bootstrap:
+    enabled: true
+    username: admin
+    password: admin123
