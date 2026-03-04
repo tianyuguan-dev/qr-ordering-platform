@@ -17,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,5 +82,25 @@ public class RestaurantUserService {
         log.info("Created staff user id={} username={} in tenant={}", saved.getId(), saved.getUsername(), tenantId);
 
         return restaurantUserConverter.toResponse(saved);
+    }
+
+    /**
+     * List staff users of a restaurant with pagination.
+     * PLATFORM_ADMIN can list any restaurant; RESTAURANT_ADMIN can list only their own tenant.
+     */
+    public Page<RestaurantUserResponse> listByTenantId(String tenantId, Pageable pageable) {
+        var principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof PlatformAdminDetails) {
+            // Platform admin can list any restaurant's users
+        } else if (principal instanceof RestaurantUserDetails currentUser) {
+            if (!currentUser.getTenantId().equals(tenantId)) {
+                throw new AccessDeniedException("Cannot list users of another restaurant");
+            }
+        } else {
+            throw new AccessDeniedException("Authentication required");
+        }
+
+        return restaurantUserRepository.findByTenantId(tenantId, pageable)
+                .map(restaurantUserConverter::toResponse);
     }
 }

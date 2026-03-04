@@ -68,14 +68,23 @@ public class SecurityConfig {
                 // Allow access to Actuator health checks
                 .requestMatchers("/actuator/**").permitAll()
 
-                // Auth endpoints (login) - no token required
+                // Auth: profile and change-password require authenticated user
+                .requestMatchers(HttpMethod.GET, "/auth/me").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/auth/change-password").authenticated()
+                // Auth: login etc. - no token required
                 .requestMatchers("/auth/**").permitAll()
 
                 // Restaurant: only platform admin can create/update/delete; GET allowed for all
                 .requestMatchers(HttpMethod.POST, "/restaurants").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/restaurants/*").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/restaurants/*").hasRole("PLATFORM_ADMIN")
-                .requestMatchers(HttpMethod.GET, "/restaurants", "/restaurants/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/restaurants", "/restaurants/*").hasRole("PLATFORM_ADMIN")
+                .requestMatchers(HttpMethod.GET, "/restaurants/*/users").authenticated()
+                .requestMatchers(HttpMethod.POST, "/restaurants/*/users").authenticated()
+
+                // Platform admin management: only platform admin can list and create
+                .requestMatchers(HttpMethod.GET, "/platform-admins").hasRole("PLATFORM_ADMIN")
+                .requestMatchers(HttpMethod.POST, "/platform-admins").hasRole("PLATFORM_ADMIN")
 
                 // All other requests require authenticated user
                 .anyRequest().authenticated()
