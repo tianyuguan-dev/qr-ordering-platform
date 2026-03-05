@@ -46,6 +46,14 @@ function logout() {
           <span class="nav-icon">▣</span>
           <span>Staff</span>
         </router-link>
+        <router-link v-if="isPlatformAdmin || isRestaurantAdmin" to="/menu" class="nav-item" active-class="active">
+          <span class="nav-icon">☰</span>
+          <span>Menu</span>
+        </router-link>
+        <router-link v-if="isPlatformAdmin || isRestaurantAdmin" to="/tables" class="nav-item" active-class="active">
+          <span class="nav-icon">▢</span>
+          <span>Tables</span>
+        </router-link>
         <router-link to="/profile" class="nav-item" active-class="active">
           <span class="nav-icon">○</span>
           <span>Profile</span>

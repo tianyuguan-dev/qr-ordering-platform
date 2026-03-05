@@ -77,6 +77,16 @@ public class SecurityConfig {
                 // Restaurant: my-restaurant (restaurant admin only; waiter/kitchen cannot edit)
                 .requestMatchers(HttpMethod.GET, "/restaurants/me").hasRole("RESTAURANT_ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/restaurants/me").hasRole("RESTAURANT_ADMIN")
+                // Menu (categories + items): me = restaurant admin; other ids = platform admin
+                .requestMatchers("/restaurants/me/categories", "/restaurants/me/categories/**").hasRole("RESTAURANT_ADMIN")
+                .requestMatchers("/restaurants/me/menu-items", "/restaurants/me/menu-items/**").hasRole("RESTAURANT_ADMIN")
+                .requestMatchers("/restaurants/*/categories", "/restaurants/*/categories/**").hasRole("PLATFORM_ADMIN")
+                .requestMatchers("/restaurants/*/menu-items", "/restaurants/*/menu-items/**").hasRole("PLATFORM_ADMIN")
+                // Tables: me = restaurant admin; other ids = platform admin
+                .requestMatchers("/restaurants/me/tables", "/restaurants/me/tables/**").hasRole("RESTAURANT_ADMIN")
+                .requestMatchers("/restaurants/*/tables", "/restaurants/*/tables/**").hasRole("PLATFORM_ADMIN")
+                // Public API (customer H5: menu, tables, submit order) - no auth
+                .requestMatchers("/public/**").permitAll()
                 // Restaurant: only platform admin can create/update/delete/list
                 .requestMatchers(HttpMethod.POST, "/restaurants").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/restaurants/*").hasRole("PLATFORM_ADMIN")
@@ -94,6 +104,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/platform-admins/*").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/platform-admins/*").hasRole("PLATFORM_ADMIN")
                 .requestMatchers(HttpMethod.POST, "/platform-admins/*/reset-password").hasRole("PLATFORM_ADMIN")
+
+                // Image upload (MinIO): any authenticated user (e.g. restaurant logo, dish image)
+                .requestMatchers(HttpMethod.POST, "/upload").authenticated()
 
                 // All other requests require authenticated user
                 .anyRequest().authenticated()

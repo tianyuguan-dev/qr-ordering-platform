@@ -87,6 +87,20 @@ jwt:
   secret: your-secret-key-change-in-production-min-256-bits-required-for-hs256-algorithm
   expiration: 86400000  # 24 hours (in milliseconds)
 
+# MinIO object storage (images: logo, dish photos). Start MinIO via docker-compose.dev.yml.
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket: qr-ordering
+  # Public URL for stored objects (same as endpoint when MinIO is accessed directly)
+  public-url: http://localhost:9000
+
+# Customer H5 base URL (for generating table QR codes - scan to open this URL)
+# In production set to your frontend URL, e.g. https://order.yourdomain.com
+app:
+  customer-base-url: http://localhost:5173
+
 # First platform admin (created when none exist). Set platform.bootstrap.enabled=false in production if you manage admin elsewhere.
 platform:
   bootstrap:

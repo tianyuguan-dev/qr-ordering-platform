@@ -44,3 +44,9 @@ logs/
 
 # Docker
 *.pid
+
+# MinIO local data (dev storage)
+minio-data/
+
+# Pictures
+pictures/

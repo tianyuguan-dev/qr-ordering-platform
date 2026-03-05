@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getMyRestaurant, updateMyRestaurant } from '../api/restaurants'
+import { uploadImage } from '../api/upload'
 import { setToken } from '../api/client'
 import { toast } from '../utils/toast'
 
@@ -11,6 +12,8 @@ const error = ref('')
 const form = ref({ name: '', description: '', logoUrl: '', address: '', phone: '' })
 const formError = ref('')
 const submitLoading = ref(false)
+const logoUploading = ref(false)
+const logoInput = ref(null)
 
 async function load() {
   loading.value = true
@@ -62,6 +65,26 @@ async function submit() {
   }
 }
 
+async function onLogoFileChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    toast('Please choose an image (JPEG, PNG, GIF, WebP)', 'error')
+    return
+  }
+  logoUploading.value = true
+  try {
+    const { url } = await uploadImage(file, { prefix: 'logos' })
+    form.value.logoUrl = url
+    toast('Logo uploaded')
+  } catch (err) {
+    toast(err.message || 'Upload failed', 'error')
+  } finally {
+    logoUploading.value = false
+    if (logoInput.value) logoInput.value.value = ''
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -80,8 +103,15 @@ onMounted(load)
         <textarea v-model="form.description" rows="2" placeholder="Description"></textarea>
       </div>
       <div class="field">
-        <label>Logo URL</label>
-        <input v-model="form.logoUrl" type="text" placeholder="https://..." />
+        <label>Logo</label>
+        <input ref="logoInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" @change="onLogoFileChange" />
+        <div class="logo-row">
+          <input v-model="form.logoUrl" type="text" placeholder="Logo URL or upload below" />
+          <button type="button" class="btn secondary" :disabled="logoUploading" @click="logoInput?.click()">
+            {{ logoUploading ? 'Uploading...' : 'Upload' }}
+          </button>
+        </div>
+        <img v-if="form.logoUrl" :src="form.logoUrl" alt="Logo" class="logo-preview" @error="$event.target.style.display='none'" />
       </div>
       <div class="field">
         <label>Address</label>
@@ -126,13 +156,35 @@ onMounted(load)
   margin-bottom: 0.35rem;
   font-size: 0.875rem;
 }
-.form .field input,
+.form .field input:not(.hidden),
 .form .field textarea {
   width: 100%;
   padding: 0.5rem 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 0.9rem;
+}
+.hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.logo-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.logo-row input {
+  flex: 1;
+}
+.logo-preview {
+  max-width: 120px;
+  max-height: 80px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid #eee;
 }
 .form-error {
   color: #c33;
@@ -153,6 +205,13 @@ onMounted(load)
 }
 .btn.primary:hover:not(:disabled) {
   background: #535bf2;
+}
+.btn.secondary {
+  background: #e2e4e8;
+  color: #333;
+}
+.btn.secondary:hover:not(:disabled) {
+  background: #d0d2d6;
 }
 .btn:disabled {
   opacity: 0.6;

@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getRestaurants, createRestaurant, updateRestaurant, deleteRestaurant } from '../api/restaurants'
+import { uploadImage } from '../api/upload'
 import { setToken } from '../api/client'
 import { toast } from '../utils/toast'
 
@@ -26,6 +27,8 @@ const modalEdit = ref(null) // editing restaurant id or null for create
 const form = ref({ name: '', description: '', logoUrl: '', address: '', phone: '' })
 const formError = ref('')
 const submitLoading = ref(false)
+const logoUploading = ref(false)
+const logoInput = ref(null)
 const deleteConfirm = ref(null) // { id, name }
 
 const user = computed(() => {
@@ -89,6 +92,26 @@ function closeModal() {
   modalEdit.value = null
 }
 
+async function onLogoFileChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    toast('Please choose an image (JPEG, PNG, GIF, WebP)', 'error')
+    return
+  }
+  logoUploading.value = true
+  try {
+    const { url } = await uploadImage(file, { prefix: 'logos' })
+    form.value.logoUrl = url
+    toast('Logo uploaded')
+  } catch (err) {
+    toast(err.message || 'Upload failed', 'error')
+  } finally {
+    logoUploading.value = false
+    if (logoInput.value) logoInput.value.value = ''
+  }
+}
+
 async function submitForm() {
   formError.value = ''
   if (!form.value.name?.trim()) {
@@ -148,6 +171,10 @@ async function confirmDelete() {
 
 function goToStaff(r) {
   router.push({ path: '/staff', query: { restaurant: r.id } })
+}
+
+function goToMenu(r) {
+  router.push({ path: '/menu', query: { restaurant: r.id } })
 }
 
 function setStatus(s) {
@@ -213,6 +240,7 @@ onMounted(loadList)
             <td v-if="isPlatformAdmin" class="actions">
               <button type="button" class="btn small" @click="openEdit(r)">Edit</button>
               <button type="button" class="btn small" @click="goToStaff(r)">Staff</button>
+              <button type="button" class="btn small" @click="goToMenu(r)">Menu</button>
               <button type="button" class="btn small danger" @click="askDelete(r)">Delete</button>
             </td>
           </tr>
@@ -255,8 +283,15 @@ onMounted(loadList)
             <textarea v-model="form.description" rows="2" placeholder="Description"></textarea>
           </div>
           <div class="field">
-            <label>Logo URL</label>
-            <input v-model="form.logoUrl" type="text" placeholder="https://..." />
+            <label>Logo</label>
+            <input ref="logoInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden" @change="onLogoFileChange" />
+            <div class="logo-row">
+              <input v-model="form.logoUrl" type="text" placeholder="Logo URL or upload" />
+              <button type="button" class="btn secondary" :disabled="logoUploading" @click="logoInput?.click()">
+                {{ logoUploading ? 'Uploading...' : 'Upload' }}
+              </button>
+            </div>
+            <img v-if="form.logoUrl" :src="form.logoUrl" alt="Logo" class="logo-preview" @error="$event.target.style.display='none'" />
           </div>
           <div class="field">
             <label>Address</label>
@@ -456,13 +491,31 @@ onMounted(loadList)
   font-size: 0.875rem;
   font-weight: 500;
 }
-.modal .field input, .modal .field textarea, .modal .field select {
+.modal .field input:not(.hidden), .modal .field textarea, .modal .field select {
   width: 100%;
   padding: 0.5rem 0.75rem;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 1rem;
   box-sizing: border-box;
+}
+.modal .field .hidden {
+  position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none;
+}
+.modal .field .logo-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.modal .field .logo-row input {
+  flex: 1;
+}
+.modal .field .logo-preview {
+  max-width: 120px;
+  max-height: 80px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid #eee;
 }
 .modal .field select.field-select {
   cursor: pointer;
