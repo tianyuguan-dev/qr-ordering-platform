@@ -1,5 +1,6 @@
 package com.qrordering.publicapi.controller;
 
+import com.qrordering.common.exception.IdempotencyConflictException;
 import com.qrordering.common.exception.ResourceNotFoundException;
 import com.qrordering.menu.entity.Category;
 import com.qrordering.menu.entity.MenuItem;
@@ -8,6 +9,7 @@ import com.qrordering.menu.repository.CategoryRepository;
 import com.qrordering.menu.repository.MenuItemRepository;
 import com.qrordering.order.dto.request.CreateOrderRequest;
 import com.qrordering.order.dto.response.OrderResponse;
+import com.qrordering.order.service.IdempotencyService;
 import com.qrordering.order.service.OrderService;
 import com.qrordering.publicapi.dto.PublicMenuResponse;
 import com.qrordering.restaurant.repository.RestaurantRepository;
@@ -39,6 +41,7 @@ public class PublicController {
     private final TableInfoRepository tableInfoRepository;
     private final TableInfoConverter tableInfoConverter;
     private final OrderService orderService;
+    private final IdempotencyService idempotencyService;
 
     @GetMapping("/info")
     @Operation(summary = "Get restaurant name and logo (for customer header)")
@@ -83,10 +86,27 @@ public class PublicController {
     }
 
     @PostMapping("/orders")
-    @Operation(summary = "Create order (customer submit)")
-    public ResponseEntity<OrderResponse> createOrder(@PathVariable String restaurantId,
-                                                      @Valid @RequestBody CreateOrderRequest request) {
-        OrderResponse order = orderService.createOrder(restaurantId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(order);
+    @Operation(summary = "Create order (customer submit). Send Idempotency-Key to avoid duplicate orders on retry.")
+    public ResponseEntity<OrderResponse> createOrder(
+            @PathVariable String restaurantId,
+            @Valid @RequestBody CreateOrderRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var existingId = idempotencyService.findExistingOrderId(restaurantId, idempotencyKey);
+            if (existingId.isPresent()) {
+                OrderResponse existing = orderService.getOrderByRestaurantAndId(restaurantId, existingId.get());
+                return ResponseEntity.ok(existing);
+            }
+        }
+
+        try {
+            OrderResponse order = orderService.createOrder(restaurantId, request, idempotencyKey);
+            return ResponseEntity.status(HttpStatus.CREATED).body(order);
+        } catch (IdempotencyConflictException e) {
+            var existingId = idempotencyService.findExistingOrderId(e.getTenantId(), e.getIdempotencyKey());
+            OrderResponse existing = orderService.getOrderByRestaurantAndId(restaurantId, existingId.orElseThrow());
+            return ResponseEntity.ok(existing);
+        }
     }
 }

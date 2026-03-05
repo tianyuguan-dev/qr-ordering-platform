@@ -34,3 +34,13 @@ export function updateTable(restaurantId, id, body) {
 export function deleteTable(restaurantId, id) {
   return apiFetch(`${base(restaurantId)}/tables/${id}`, { method: 'DELETE' })
 }
+
+/** @param {string} restaurantId @param {number} tableId - Checkout summary for table (active orders + total) */
+export function getCheckoutSummary(restaurantId, tableId) {
+  return apiFetch(`${base(restaurantId)}/tables/${tableId}/checkout-summary`)
+}
+
+/** @param {string} restaurantId @param {number} tableId - Checkout table (complete/cancel orders, set table available) */
+export function checkoutTable(restaurantId, tableId) {
+  return apiFetch(`${base(restaurantId)}/tables/${tableId}/checkout`, { method: 'POST' })
+}

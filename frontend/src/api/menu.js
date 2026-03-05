@@ -90,3 +90,15 @@ export function updateMenuItem(restaurantId, id, body) {
 export function deleteMenuItem(restaurantId, id) {
   return apiFetch(`${base(restaurantId)}/menu-items/${id}`, { method: 'DELETE' })
 }
+
+/**
+ * @param {string} restaurantId
+ * @param {number} id
+ * @param {{ status: number }} body - 1=Available, 2=Sold Out, 3=Inactive
+ */
+export function updateMenuItemStatus(restaurantId, id, body) {
+  return apiFetch(`${base(restaurantId)}/menu-items/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+}

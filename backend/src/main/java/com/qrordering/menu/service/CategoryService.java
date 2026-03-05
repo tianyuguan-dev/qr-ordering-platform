@@ -33,8 +33,11 @@ public class CategoryService {
     private String resolveTenantId(String restaurantId) {
         if ("me".equalsIgnoreCase(restaurantId)) {
             var principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            if (!(principal instanceof RestaurantUserDetails r) || r.getRole() != UserRole.RESTAURANT_ADMIN) {
-                throw new org.springframework.security.access.AccessDeniedException("Only restaurant admin can use /me");
+            if (!(principal instanceof RestaurantUserDetails r)) {
+                throw new org.springframework.security.access.AccessDeniedException("Not a restaurant user");
+            }
+            if (r.getRole() != UserRole.RESTAURANT_ADMIN && r.getRole() != UserRole.KITCHEN) {
+                throw new org.springframework.security.access.AccessDeniedException("Only restaurant admin or kitchen can use /me for menu");
             }
             return r.getTenantId();
         }

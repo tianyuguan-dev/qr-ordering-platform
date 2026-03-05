@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getRestaurants } from '../api/restaurants'
-import { getTables, createTable, updateTable, deleteTable } from '../api/tables'
+import { getTables, createTable, updateTable, deleteTable, getCheckoutSummary, checkoutTable } from '../api/tables'
 import { setToken } from '../api/client'
 import { toast } from '../utils/toast'
 
@@ -23,11 +23,13 @@ const user = computed(() => {
 })
 const isPlatformAdmin = computed(() => user.value?.roleName === 'PLATFORM_ADMIN')
 const isRestaurantAdmin = computed(() => user.value?.roleName === 'RESTAURANT_ADMIN')
+const isWaiter = computed(() => user.value?.roleName === 'WAITER')
+const canEditTables = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value)
 
 const restaurantList = ref([])
 const selectedRestaurantId = ref('')
 const effectiveRestaurantId = computed(() => {
-  if (isRestaurantAdmin.value) return 'me'
+  if (isRestaurantAdmin.value || isWaiter.value) return 'me'
   return selectedRestaurantId.value || route.query.restaurant || null
 })
 
@@ -40,6 +42,22 @@ const form = ref({ tableNumber: '', seats: 4, status: 1 })
 const formError = ref('')
 const saving = ref(false)
 const deleteConfirm = ref(null)
+
+const checkoutModalOpen = ref(false)
+const checkoutSummary = ref(null)
+const checkoutTableId = ref(null)
+const checkoutLoading = ref(false)
+const checkoutConfirming = ref(false)
+
+const ORDER_STATUS_LABELS = {
+  1: 'Created',
+  2: 'Confirmed',
+  3: 'Preparing',
+  4: 'Ready',
+  5: 'Served',
+  6: 'Completed',
+  7: 'Cancelled',
+}
 
 async function loadRestaurants() {
   if (!isPlatformAdmin.value) return
@@ -164,6 +182,68 @@ function qrImageUrl(table) {
   return `${QR_API}?size=120x120&data=${encodeURIComponent(url)}`
 }
 
+async function openCheckout(t) {
+  const rid = effectiveRestaurantId.value
+  if (!rid) return
+  checkoutTableId.value = t.id
+  checkoutSummary.value = null
+  checkoutModalOpen.value = true
+  checkoutLoading.value = true
+  try {
+    checkoutSummary.value = await getCheckoutSummary(rid, t.id)
+  } catch (e) {
+    toast(e.message || 'Failed to load checkout summary', 'error')
+    checkoutModalOpen.value = false
+  } finally {
+    checkoutLoading.value = false
+  }
+}
+
+function closeCheckoutModal() {
+  checkoutModalOpen.value = false
+  checkoutSummary.value = null
+  checkoutTableId.value = null
+}
+
+async function confirmCheckout() {
+  const rid = effectiveRestaurantId.value
+  const tid = checkoutTableId.value
+  if (!rid || !tid) return
+  checkoutConfirming.value = true
+  try {
+    await checkoutTable(rid, tid)
+    toast('Table checked out')
+    closeCheckoutModal()
+    await loadTables()
+  } catch (e) {
+    toast(e.message || 'Checkout failed', 'error')
+  } finally {
+    checkoutConfirming.value = false
+  }
+}
+
+function orderStatusLabel(code) {
+  return ORDER_STATUS_LABELS[code] ?? code
+}
+
+function checkoutOutcomeLabel(order) {
+  return order.status === 5 ? 'To be completed (paid)' : 'To be cancelled (not charged)'
+}
+
+const checkoutAmountToPay = computed(() => {
+  const s = checkoutSummary.value
+  if (!s?.orders?.length) return '0'
+  const sum = s.orders.filter((o) => o.status === 5).reduce((acc, o) => acc + Number(o.totalAmount || 0), 0)
+  return sum.toFixed(2)
+})
+
+const checkoutCancelledTotal = computed(() => {
+  const s = checkoutSummary.value
+  if (!s?.orders?.length) return '0'
+  const sum = s.orders.filter((o) => o.status !== 5).reduce((acc, o) => acc + Number(o.totalAmount || 0), 0)
+  return sum.toFixed(2)
+})
+
 onMounted(async () => {
   await loadRestaurants()
   if (effectiveRestaurantId.value) await loadTables()
@@ -190,7 +270,7 @@ watch(effectiveRestaurantId, (val) => {
       <div class="panel">
         <div class="panel-header">
           <span>Dining tables</span>
-          <button type="button" class="btn primary" @click="openCreate">Add Table</button>
+          <button v-if="canEditTables" type="button" class="btn primary" @click="openCreate">Add Table</button>
         </div>
         <p v-if="error" class="error">{{ error }}</p>
         <div v-if="loading" class="loading">Loading...</div>
@@ -204,8 +284,9 @@ watch(effectiveRestaurantId, (val) => {
             <span class="table-seats">{{ t.seats }} seats</span>
             <span class="table-status">{{ statusLabel(t.status) }}</span>
             <div class="row-actions">
-              <button type="button" class="btn small secondary" @click="openEdit(t)">Edit</button>
-              <button type="button" class="btn small danger" @click="askDelete(t)">Delete</button>
+              <button type="button" class="btn small primary" @click="openCheckout(t)">Checkout</button>
+              <button v-if="canEditTables" type="button" class="btn small secondary" @click="openEdit(t)">Edit</button>
+              <button v-if="canEditTables" type="button" class="btn small danger" @click="askDelete(t)">Delete</button>
             </div>
           </li>
           <li v-if="!list.length" class="empty">No tables yet. Add one for customers to select.</li>
@@ -247,6 +328,60 @@ watch(effectiveRestaurantId, (val) => {
         <div class="modal-actions">
           <button type="button" class="btn secondary" @click="cancelDelete">Cancel</button>
           <button type="button" class="btn danger" @click="doDelete">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="checkoutModalOpen" class="modal-overlay checkout-overlay" @click.self="closeCheckoutModal">
+      <div class="modal modal-checkout">
+        <div class="checkout-header">
+          <span class="checkout-title">Checkout</span>
+          <span class="checkout-table-badge">Table {{ checkoutSummary?.tableNumber ?? '—' }}</span>
+        </div>
+        <div v-if="checkoutLoading" class="checkout-loading">Loading...</div>
+        <template v-else-if="checkoutSummary">
+          <p v-if="checkoutSummary.orderCount === 0" class="checkout-empty">No pending orders for this table.</p>
+          <template v-else>
+            <ul class="checkout-order-list">
+              <li v-for="o in checkoutSummary.orders" :key="o.id" class="checkout-order-block" :class="o.status === 5 ? 'block-paid' : 'block-cancelled'">
+                <div class="checkout-order-header">
+                  <span class="co-outcome" :class="o.status === 5 ? 'outcome-paid' : 'outcome-cancelled'">
+                    {{ checkoutOutcomeLabel(o) }}
+                  </span>
+                  <span class="co-amount">¥{{ o.totalAmount }}</span>
+                </div>
+                <p class="co-order-id">{{ o.orderNumber }}</p>
+                <ul v-if="o.items?.length" class="checkout-item-list">
+                  <li v-for="(item, idx) in o.items" :key="idx" class="checkout-item-row">
+                    <span class="ci-name">{{ item.name }} × {{ item.quantity }}</span>
+                    <span class="ci-subtotal">¥{{ item.subtotal }}</span>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+            <div class="checkout-summary-box">
+              <p v-if="Number(checkoutAmountToPay) > 0" class="checkout-total checkout-to-pay">
+                <span class="summary-label">Amount to pay</span>
+                <span class="summary-value">¥{{ checkoutAmountToPay }}</span>
+              </p>
+              <p v-if="Number(checkoutCancelledTotal) > 0" class="checkout-total checkout-cancelled">
+                <span class="summary-label">Cancelled (not charged)</span>
+                <span class="summary-value">¥{{ checkoutCancelledTotal }}</span>
+              </p>
+            </div>
+          </template>
+        </template>
+        <div class="modal-actions checkout-actions">
+          <button type="button" class="btn secondary" @click="closeCheckoutModal">Cancel</button>
+          <button
+            v-if="checkoutSummary?.orderCount > 0"
+            type="button"
+            class="btn primary btn-confirm"
+            :disabled="checkoutConfirming"
+            @click="confirmCheckout"
+          >
+            {{ checkoutConfirming ? 'Checking out...' : 'Confirm checkout' }}
+          </button>
         </div>
       </div>
     </div>
@@ -400,6 +535,165 @@ watch(effectiveRestaurantId, (val) => {
 }
 .modal.modal-sm {
   max-width: 360px;
+}
+.checkout-overlay {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+}
+.modal.modal-checkout {
+  max-width: 440px;
+  padding: 0;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+.checkout-header {
+  background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+  color: #fff;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.checkout-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.checkout-table-badge {
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.checkout-loading,
+.checkout-empty {
+  padding: 1.5rem 1.25rem;
+  color: #718096;
+  font-size: 0.9rem;
+}
+.checkout-order-list {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #f8fafc;
+}
+.checkout-order-block {
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-left: 4px solid #cbd5e0;
+}
+.checkout-order-block:last-child {
+  margin-bottom: 0;
+}
+.checkout-order-block.block-paid {
+  border-left-color: #38a169;
+}
+.checkout-order-block.block-cancelled {
+  border-left-color: #e53e3e;
+}
+.checkout-order-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.co-outcome {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.co-outcome.outcome-paid {
+  background: #c6f6d5;
+  color: #276749;
+}
+.co-outcome.outcome-cancelled {
+  background: #fed7d7;
+  color: #c53030;
+}
+.co-amount {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #2d3748;
+}
+.co-order-id {
+  font-size: 0.7rem;
+  color: #a0aec0;
+  margin: 0 0 0.5rem;
+  font-family: ui-monospace, monospace;
+}
+.checkout-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.85rem;
+  color: #4a5568;
+}
+.checkout-item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0;
+  border-top: 1px solid #f1f5f9;
+}
+.checkout-item-row:first-child {
+  border-top: none;
+}
+.ci-name { }
+.ci-subtotal {
+  font-weight: 600;
+  color: #2d3748;
+}
+.checkout-summary-box {
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+}
+.checkout-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0.4rem 0;
+  font-size: 0.95rem;
+}
+.checkout-total:first-child {
+  margin-top: 0;
+}
+.checkout-to-pay {
+  font-weight: 700;
+  color: #276749;
+  font-size: 1.05rem;
+}
+.checkout-to-pay .summary-value {
+  font-size: 1.15rem;
+}
+.checkout-cancelled {
+  color: #718096;
+  font-weight: 500;
+}
+.checkout-cancelled .summary-value {
+  text-decoration: line-through;
+  color: #a0aec0;
+}
+.checkout-actions {
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  gap: 0.75rem;
+}
+.btn-confirm {
+  padding: 0.6rem 1.25rem;
+  font-weight: 600;
 }
 .modal h2 {
   margin: 0 0 1rem;

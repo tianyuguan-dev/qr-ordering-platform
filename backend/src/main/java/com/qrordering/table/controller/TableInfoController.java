@@ -1,5 +1,7 @@
 package com.qrordering.table.controller;
 
+import com.qrordering.order.dto.response.TableCheckoutSummaryResponse;
+import com.qrordering.order.service.OrderService;
 import com.qrordering.table.dto.request.CreateTableInfoRequest;
 import com.qrordering.table.dto.request.UpdateTableInfoRequest;
 import com.qrordering.table.dto.response.TableInfoResponse;
@@ -21,6 +23,7 @@ import java.util.List;
 public class TableInfoController {
 
     private final TableInfoService tableInfoService;
+    private final OrderService orderService;
 
     @GetMapping
     @Operation(summary = "List tables")
@@ -48,5 +51,21 @@ public class TableInfoController {
     public ResponseEntity<Void> delete(@PathVariable String restaurantId, @PathVariable Long id) {
         tableInfoService.delete(restaurantId, id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/checkout-summary")
+    @Operation(summary = "Get checkout summary for table (active orders + combined total)")
+    public ResponseEntity<TableCheckoutSummaryResponse> getCheckoutSummary(
+            @PathVariable String restaurantId,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(orderService.getCheckoutSummary(restaurantId, id));
+    }
+
+    @PostMapping("/{id}/checkout")
+    @Operation(summary = "Checkout table: SERVED→COMPLETED, others→CANCELLED, table→AVAILABLE")
+    public ResponseEntity<TableCheckoutSummaryResponse> checkoutTable(
+            @PathVariable String restaurantId,
+            @PathVariable Long id) {
+        return ResponseEntity.ok(orderService.checkoutTable(restaurantId, id));
     }
 }

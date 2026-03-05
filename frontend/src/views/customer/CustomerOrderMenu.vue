@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { getPublicRestaurantInfo, getPublicMenu, createOrder } from '../../api/public'
+import { getPublicRestaurantInfo, getPublicMenu, getPublicTables, createOrder } from '../../api/public'
 import { toast } from '../../utils/toast'
 
 const route = useRoute()
@@ -18,6 +18,9 @@ const cart = ref([]) // { menuItemId, name, price, quantity }
 const showCart = ref(false)
 const customerNotes = ref('')
 const submitting = ref(false)
+const tableReserved = ref(false)
+/** One idempotency key per submit attempt (reused on retry/double-click) */
+const submitIdempotencyKey = ref(null)
 
 const cartTotal = computed(() => {
   return cart.value.reduce((sum, c) => sum + Number(c.price) * c.quantity, 0).toFixed(2)
@@ -33,6 +36,7 @@ function getItemById(id) {
 }
 
 function addToCart(item) {
+  if (tableReserved.value) return
   const existing = cart.value.find((c) => c.menuItemId === item.id)
   if (existing) {
     existing.quantity += 1
@@ -63,16 +67,24 @@ function clearCart() {
 
 async function submitOrder() {
   if (!tableId.value || cart.value.length === 0) return
+  if (!submitIdempotencyKey.value) {
+    submitIdempotencyKey.value = crypto.randomUUID()
+  }
   submitting.value = true
   try {
-    const order = await createOrder(restaurantId.value, {
-      tableId: tableId.value,
-      items: cart.value.map((c) => ({ menuItemId: c.menuItemId, quantity: c.quantity })),
-      customerNotes: customerNotes.value?.trim() || undefined,
-    })
+    const order = await createOrder(
+      restaurantId.value,
+      {
+        tableId: tableId.value,
+        items: cart.value.map((c) => ({ menuItemId: c.menuItemId, quantity: c.quantity })),
+        customerNotes: customerNotes.value?.trim() || undefined,
+      },
+      { idempotencyKey: submitIdempotencyKey.value },
+    )
     toast('Order submitted! Order #' + (order.orderNumber || order.id))
     clearCart()
     customerNotes.value = ''
+    submitIdempotencyKey.value = null
   } catch (e) {
     toast(e.message || 'Order failed', 'error')
   } finally {
@@ -82,17 +94,22 @@ async function submitOrder() {
 
 async function load() {
   const rid = restaurantId.value
+  const tid = tableId.value
   if (!rid) return
   loading.value = true
   error.value = ''
+  tableReserved.value = false
   try {
-    const [info, menu] = await Promise.all([
+    const [info, menu, tables] = await Promise.all([
       getPublicRestaurantInfo(rid),
       getPublicMenu(rid),
+      getPublicTables(rid),
     ])
     restaurantName.value = info.name || 'Restaurant'
     categories.value = menu.categories || []
     items.value = menu.items || []
+    const currentTable = Array.isArray(tables) && tid ? tables.find((t) => Number(t.id) === Number(tid)) : null
+    tableReserved.value = currentTable != null && Number(currentTable.status) === 3
   } catch (e) {
     error.value = e.message || 'Failed to load menu'
   } finally {
@@ -111,6 +128,7 @@ onMounted(load)
     </header>
 
     <p v-if="error" class="error">{{ error }}</p>
+    <div v-if="tableReserved" class="reserved-banner">This table is reserved. Ordering is not available.</div>
     <div v-if="loading" class="loading">Loading menu...</div>
 
     <template v-else>
@@ -121,7 +139,7 @@ onMounted(load)
             v-for="item in itemByCategory(cat.id)"
             :key="item.id"
             class="item-card"
-            @click="addToCart(item)"
+            @click="!tableReserved && addToCart(item)"
           >
             <img
               v-if="item.imageUrl"
@@ -134,7 +152,7 @@ onMounted(load)
               <span class="item-name">{{ item.name }}</span>
               <span class="item-price">${{ Number(item.price).toFixed(2) }}</span>
             </div>
-            <button type="button" class="add-btn">+ Add</button>
+            <button type="button" class="add-btn" :disabled="tableReserved">+ Add</button>
           </div>
         </div>
       </div>
@@ -145,7 +163,7 @@ onMounted(load)
             v-for="item in items.filter((i) => !i.categoryId)"
             :key="item.id"
             class="item-card"
-            @click="addToCart(item)"
+            @click="!tableReserved && addToCart(item)"
           >
             <img
               v-if="item.imageUrl"
@@ -158,7 +176,7 @@ onMounted(load)
               <span class="item-name">{{ item.name }}</span>
               <span class="item-price">${{ Number(item.price).toFixed(2) }}</span>
             </div>
-            <button type="button" class="add-btn">+ Add</button>
+            <button type="button" class="add-btn" :disabled="tableReserved">+ Add</button>
           </div>
         </div>
       </div>
@@ -166,7 +184,7 @@ onMounted(load)
 
     <!-- Cart FAB -->
     <button
-      v-if="cartCount > 0"
+      v-if="cartCount > 0 && !tableReserved"
       type="button"
       class="cart-fab"
       @click="showCart = true"
@@ -202,7 +220,7 @@ onMounted(load)
         <button
           type="button"
           class="submit-btn"
-          :disabled="submitting"
+          :disabled="submitting || tableReserved"
           @click="submitOrder"
         >
           {{ submitting ? 'Submitting...' : 'Submit order' }}
@@ -239,6 +257,14 @@ onMounted(load)
   background: #fee;
   border-radius: 8px;
   margin-bottom: 1rem;
+}
+.reserved-banner {
+  padding: 0.75rem 1rem;
+  background: #fff3e0;
+  color: #e65100;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-weight: 500;
 }
 .loading {
   text-align: center;

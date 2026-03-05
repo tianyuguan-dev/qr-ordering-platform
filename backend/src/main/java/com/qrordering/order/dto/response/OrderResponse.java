@@ -26,6 +26,9 @@ public class OrderResponse {
     @Schema(description = "Table ID")
     private Long tableId;
 
+    @Schema(description = "Table number (e.g. T01)")
+    private String tableNumber;
+
     @Schema(description = "Status code")
     private Integer status;
 

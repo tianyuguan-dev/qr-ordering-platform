@@ -77,14 +77,23 @@ public class SecurityConfig {
                 // Restaurant: my-restaurant (restaurant admin only; waiter/kitchen cannot edit)
                 .requestMatchers(HttpMethod.GET, "/restaurants/me").hasRole("RESTAURANT_ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/restaurants/me").hasRole("RESTAURANT_ADMIN")
-                // Menu (categories + items): me = restaurant admin; other ids = platform admin
+                // Menu: kitchen can read categories/items and update item status (sold out / inactive)
+                .requestMatchers(HttpMethod.GET, "/restaurants/me/categories", "/restaurants/me/categories/**").hasAnyRole("RESTAURANT_ADMIN", "KITCHEN")
+                .requestMatchers(HttpMethod.GET, "/restaurants/me/menu-items", "/restaurants/me/menu-items/**").hasAnyRole("RESTAURANT_ADMIN", "KITCHEN")
+                .requestMatchers(HttpMethod.PATCH, "/restaurants/me/menu-items/*/status").hasAnyRole("RESTAURANT_ADMIN", "KITCHEN")
                 .requestMatchers("/restaurants/me/categories", "/restaurants/me/categories/**").hasRole("RESTAURANT_ADMIN")
                 .requestMatchers("/restaurants/me/menu-items", "/restaurants/me/menu-items/**").hasRole("RESTAURANT_ADMIN")
                 .requestMatchers("/restaurants/*/categories", "/restaurants/*/categories/**").hasRole("PLATFORM_ADMIN")
                 .requestMatchers("/restaurants/*/menu-items", "/restaurants/*/menu-items/**").hasRole("PLATFORM_ADMIN")
-                // Tables: me = restaurant admin; other ids = platform admin
+                // Tables: waiter can list and checkout; admin can full CRUD. More specific first.
+                .requestMatchers(HttpMethod.GET, "/restaurants/me/tables").hasAnyRole("RESTAURANT_ADMIN", "WAITER")
+                .requestMatchers(HttpMethod.GET, "/restaurants/me/tables/*/checkout-summary").hasAnyRole("RESTAURANT_ADMIN", "WAITER")
+                .requestMatchers(HttpMethod.POST, "/restaurants/me/tables/*/checkout").hasAnyRole("RESTAURANT_ADMIN", "WAITER")
                 .requestMatchers("/restaurants/me/tables", "/restaurants/me/tables/**").hasRole("RESTAURANT_ADMIN")
                 .requestMatchers("/restaurants/*/tables", "/restaurants/*/tables/**").hasRole("PLATFORM_ADMIN")
+                // Orders: restaurant admin, waiter, kitchen can list and update status
+                .requestMatchers("/restaurants/me/orders", "/restaurants/me/orders/**").hasAnyRole("RESTAURANT_ADMIN", "WAITER", "KITCHEN")
+                .requestMatchers("/restaurants/*/orders", "/restaurants/*/orders/**").hasRole("PLATFORM_ADMIN")
                 // Public API (customer H5: menu, tables, submit order) - no auth
                 .requestMatchers("/public/**").permitAll()
                 // Restaurant: only platform admin can create/update/delete/list

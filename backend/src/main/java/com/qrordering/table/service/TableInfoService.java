@@ -41,8 +41,11 @@ public class TableInfoService {
     private String resolveTenantId(String restaurantId) {
         if ("me".equalsIgnoreCase(restaurantId)) {
             var principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            if (!(principal instanceof RestaurantUserDetails r) || r.getRole() != UserRole.RESTAURANT_ADMIN) {
-                throw new org.springframework.security.access.AccessDeniedException("Only restaurant admin can use /me");
+            if (!(principal instanceof RestaurantUserDetails r)) {
+                throw new org.springframework.security.access.AccessDeniedException("Not a restaurant user");
+            }
+            if (r.getRole() != UserRole.RESTAURANT_ADMIN && r.getRole() != UserRole.WAITER) {
+                throw new org.springframework.security.access.AccessDeniedException("Only restaurant admin or waiter can use /me for tables");
             }
             return r.getTenantId();
         }

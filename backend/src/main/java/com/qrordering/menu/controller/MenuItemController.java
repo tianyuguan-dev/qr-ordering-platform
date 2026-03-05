@@ -2,6 +2,7 @@ package com.qrordering.menu.controller;
 
 import com.qrordering.menu.dto.request.CreateMenuItemRequest;
 import com.qrordering.menu.dto.request.UpdateMenuItemRequest;
+import com.qrordering.menu.dto.request.UpdateMenuItemStatusRequest;
 import com.qrordering.menu.dto.response.MenuItemResponse;
 import com.qrordering.menu.service.MenuItemService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -61,6 +62,14 @@ public class MenuItemController {
                                                    @PathVariable Long id,
                                                    @Valid @RequestBody UpdateMenuItemRequest request) {
         return ResponseEntity.ok(menuItemService.update(restaurantId, id, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    @Operation(summary = "Update menu item status only (e.g. kitchen: sold out / inactive)")
+    public ResponseEntity<MenuItemResponse> updateStatus(@PathVariable String restaurantId,
+                                                          @PathVariable Long id,
+                                                          @Valid @RequestBody UpdateMenuItemStatusRequest request) {
+        return ResponseEntity.ok(menuItemService.updateStatus(restaurantId, id, request.getStatus()));
     }
 
     @DeleteMapping("/{id}")

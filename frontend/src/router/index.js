@@ -9,6 +9,7 @@ import ManageAdminsView from '../views/ManageAdminsView.vue'
 import MyRestaurantView from '../views/MyRestaurantView.vue'
 import MenuView from '../views/MenuView.vue'
 import TablesView from '../views/TablesView.vue'
+import OrdersView from '../views/OrdersView.vue'
 import CustomerLayout from '../layouts/CustomerLayout.vue'
 import CustomerTableSelect from '../views/customer/CustomerTableSelect.vue'
 import CustomerOrderMenu from '../views/customer/CustomerOrderMenu.vue'
@@ -27,6 +28,7 @@ const routes = [
       { path: 'my-restaurant', name: 'MyRestaurant', component: MyRestaurantView, meta: { title: 'My Restaurant' } },
       { path: 'menu', name: 'Menu', component: MenuView, meta: { title: 'Menu' } },
       { path: 'tables', name: 'Tables', component: TablesView, meta: { title: 'Tables' } },
+      { path: 'orders', name: 'Orders', component: OrdersView, meta: { title: 'Orders' } },
       { path: 'staff', name: 'Staff', component: ManageAdminsView, meta: { title: 'Staff' } },
       { path: 'profile', name: 'Profile', component: ProfileView, meta: { title: 'Profile' } },
     ],
@@ -60,13 +62,17 @@ router.beforeEach((to) => {
       if (role !== 'PLATFORM_ADMIN') return { path: '/home' }
     } else if (to.path === '/my-restaurant') {
       if (role !== 'RESTAURANT_ADMIN') return { path: '/home' }
-    } else if (to.path === '/menu' || to.path === '/tables') {
-      if (role !== 'PLATFORM_ADMIN' && role !== 'RESTAURANT_ADMIN') return { path: '/home' }
+    } else if (to.path === '/menu') {
+      if (role !== 'PLATFORM_ADMIN' && role !== 'RESTAURANT_ADMIN' && role !== 'KITCHEN') return { path: '/home' }
+    } else if (to.path === '/tables') {
+      if (role !== 'PLATFORM_ADMIN' && role !== 'RESTAURANT_ADMIN' && role !== 'WAITER') return { path: '/home' }
+    } else if (to.path === '/orders') {
+      if (role !== 'PLATFORM_ADMIN' && role !== 'RESTAURANT_ADMIN' && role !== 'WAITER' && role !== 'KITCHEN') return { path: '/home' }
     } else if (to.path === '/staff') {
       if (role !== 'PLATFORM_ADMIN' && role !== 'RESTAURANT_ADMIN') return { path: '/home' }
     }
   } catch (_) {
-    if (to.path === '/my-restaurant' || to.path === '/menu' || to.path === '/tables' || to.path === '/staff') return { path: '/login' }
+    if (['/my-restaurant', '/menu', '/tables', '/orders', '/staff'].includes(to.path)) return { path: '/login' }
   }
 })
 

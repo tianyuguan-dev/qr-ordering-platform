@@ -32,8 +32,11 @@ public class MenuItemService {
     private String resolveTenantId(String restaurantId) {
         if ("me".equalsIgnoreCase(restaurantId)) {
             var principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-            if (!(principal instanceof RestaurantUserDetails r) || r.getRole() != UserRole.RESTAURANT_ADMIN) {
-                throw new org.springframework.security.access.AccessDeniedException("Only restaurant admin can use /me");
+            if (!(principal instanceof RestaurantUserDetails r)) {
+                throw new org.springframework.security.access.AccessDeniedException("Not a restaurant user");
+            }
+            if (r.getRole() != UserRole.RESTAURANT_ADMIN && r.getRole() != UserRole.KITCHEN) {
+                throw new org.springframework.security.access.AccessDeniedException("Only restaurant admin or kitchen can use /me for menu");
             }
             return r.getTenantId();
         }
@@ -130,5 +133,17 @@ public class MenuItemService {
             throw new ResourceNotFoundException("Menu item", String.valueOf(id));
         }
         menuItemRepository.delete(item);
+    }
+
+    @Transactional
+    public MenuItemResponse updateStatus(String restaurantId, Long id, Integer statusCode) {
+        String tenantId = resolveTenantId(restaurantId);
+        MenuItem item = menuItemRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Menu item", String.valueOf(id)));
+        if (!item.getTenantId().equals(tenantId)) {
+            throw new ResourceNotFoundException("Menu item", String.valueOf(id));
+        }
+        item.setStatus(MenuItemStatus.fromCode(statusCode));
+        return menuItemConverter.toResponse(menuItemRepository.save(item));
     }
 }

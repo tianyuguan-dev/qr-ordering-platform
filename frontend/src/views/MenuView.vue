@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getRestaurants } from '../api/restaurants'
 import { getCategories, createCategory, updateCategory, deleteCategory } from '../api/menu'
-import { getMenuItems, createMenuItem, updateMenuItem, deleteMenuItem } from '../api/menu'
+import { getMenuItems, getAllMenuItems, createMenuItem, updateMenuItem, deleteMenuItem, updateMenuItemStatus } from '../api/menu'
 import { uploadImage } from '../api/upload'
 import { setToken } from '../api/client'
 import { toast } from '../utils/toast'
@@ -25,6 +25,8 @@ const user = computed(() => {
 })
 const isPlatformAdmin = computed(() => user.value?.roleName === 'PLATFORM_ADMIN')
 const isRestaurantAdmin = computed(() => user.value?.roleName === 'RESTAURANT_ADMIN')
+const isKitchen = computed(() => user.value?.roleName === 'KITCHEN')
+const canEditMenu = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value)
 
 const restaurantList = ref([])
 const selectedRestaurantId = ref('')
@@ -65,7 +67,7 @@ const itemImageInput = ref(null)
 const itemDeleteConfirm = ref(null)
 
 const effectiveRestaurantId = computed(() => {
-  if (isRestaurantAdmin.value) return 'me'
+  if (isRestaurantAdmin.value || isKitchen.value) return 'me'
   return selectedRestaurantId.value || route.query.restaurant || null
 })
 
@@ -339,21 +341,59 @@ function statusLabel(code) {
   return STATUS_OPTIONS.find((o) => o.value === code)?.label ?? code
 }
 
+const kitchenItems = ref([])
+const kitchenItemsLoading = ref(false)
+async function loadKitchenItems() {
+  const rid = effectiveRestaurantId.value
+  if (!rid) return
+  kitchenItemsLoading.value = true
+  try {
+    kitchenItems.value = await getAllMenuItems(rid)
+  } catch (e) {
+    if (e.status === 401) {
+      setToken(null)
+      localStorage.removeItem('user')
+      await router.push('/login')
+    } else toast(e.message || 'Failed to load items', 'error')
+  } finally {
+    kitchenItemsLoading.value = false
+  }
+}
+
+const statusUpdating = ref(null)
+async function onKitchenStatusChange(item, newStatus) {
+  const rid = effectiveRestaurantId.value
+  if (!rid) return
+  statusUpdating.value = item.id
+  try {
+    await updateMenuItemStatus(rid, item.id, { status: newStatus })
+    item.status = newStatus
+    toast('Status updated')
+  } catch (e) {
+    toast(e.message || 'Update failed', 'error')
+  } finally {
+    statusUpdating.value = null
+  }
+}
+
 onMounted(async () => {
   await loadRestaurants()
   if (effectiveRestaurantId.value) {
     await loadCategories()
-    await loadItems()
+    if (isKitchen.value) await loadKitchenItems()
+    else await loadItems()
   }
 })
 
 watch(effectiveRestaurantId, (val) => {
   if (val) {
     loadCategories()
-    loadItems()
+    if (isKitchen.value) loadKitchenItems()
+    else loadItems()
   } else {
     categories.value = []
     items.value = []
+    kitchenItems.value = []
   }
 })
 </script>
@@ -370,6 +410,47 @@ watch(effectiveRestaurantId, (val) => {
     </div>
     <div v-if="isPlatformAdmin && !effectiveRestaurantId" class="hint">Select a restaurant to manage its menu.</div>
     <template v-if="effectiveRestaurantId">
+    <!-- Kitchen: item availability only -->
+    <div v-if="isKitchen" class="panel">
+      <div class="panel-header">
+        <span>Item availability</span>
+      </div>
+      <p class="kitchen-hint">Set items as Available, Sold Out, or Inactive. Customers cannot order Sold Out or Inactive items.</p>
+      <div v-if="kitchenItemsLoading" class="loading">Loading...</div>
+      <div v-else class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Price</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in kitchenItems" :key="item.id">
+              <td>{{ item.name }}</td>
+              <td>{{ categoryName(item.categoryId) }}</td>
+              <td>{{ item.price != null ? Number(item.price).toFixed(2) : '—' }}</td>
+              <td>
+                <select
+                  :value="item.status"
+                  class="status-select"
+                  :disabled="statusUpdating === item.id"
+                  @change="onKitchenStatusChange(item, Number(($event.target).value))"
+                >
+                  <option v-for="opt in STATUS_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="!kitchenItems.length" class="empty">No menu items.</div>
+      </div>
+    </div>
+
+    <!-- Admin: full menu management -->
+    <template v-else>
     <div class="tabs">
       <button type="button" class="tab" :class="{ active: tab === 'categories' }" @click="tab = 'categories'">
         Categories
@@ -383,7 +464,7 @@ watch(effectiveRestaurantId, (val) => {
     <div v-show="tab === 'categories'" class="panel">
       <div class="panel-header">
         <span>Categories</span>
-        <button type="button" class="btn primary" @click="openCategoryCreate">Add Category</button>
+        <button v-if="canEditMenu" type="button" class="btn primary" @click="openCategoryCreate">Add Category</button>
       </div>
       <p v-if="categoryError" class="error">{{ categoryError }}</p>
       <div v-if="categoryLoading" class="loading">Loading...</div>
@@ -391,7 +472,7 @@ watch(effectiveRestaurantId, (val) => {
         <li v-for="c in categories" :key="c.id" class="category-row">
           <span class="cat-name">{{ c.name }}</span>
           <span class="cat-sort">Order: {{ c.sortOrder }}</span>
-          <div class="row-actions">
+          <div v-if="canEditMenu" class="row-actions">
             <button type="button" class="btn small secondary" @click="openCategoryEdit(c)">Edit</button>
             <button type="button" class="btn small danger" @click="confirmDeleteCategory(c)">Delete</button>
           </div>
@@ -404,7 +485,7 @@ watch(effectiveRestaurantId, (val) => {
     <div v-show="tab === 'items'" class="panel">
       <div class="panel-header">
         <span>Menu Items</span>
-        <button type="button" class="btn primary" @click="openItemCreate">Add Item</button>
+        <button v-if="canEditMenu" type="button" class="btn primary" @click="openItemCreate">Add Item</button>
       </div>
       <div class="filters">
         <select v-model="categoryFilter" class="filter-select" @change="loadItems">
@@ -446,8 +527,10 @@ watch(effectiveRestaurantId, (val) => {
               <td>{{ item.price != null ? Number(item.price).toFixed(2) : '—' }}</td>
               <td>{{ statusLabel(item.status) }}</td>
               <td class="actions">
-                <button type="button" class="btn small secondary" @click="openItemEdit(item)">Edit</button>
-                <button type="button" class="btn small danger" @click="confirmDeleteItem(item)">Delete</button>
+                <template v-if="canEditMenu">
+                  <button type="button" class="btn small secondary" @click="openItemEdit(item)">Edit</button>
+                  <button type="button" class="btn small danger" @click="confirmDeleteItem(item)">Delete</button>
+                </template>
               </td>
             </tr>
           </tbody>
@@ -591,6 +674,7 @@ watch(effectiveRestaurantId, (val) => {
       </div>
     </div>
     </template>
+    </template>
   </div>
 </template>
 
@@ -665,6 +749,17 @@ watch(effectiveRestaurantId, (val) => {
   color: #c33;
   padding: 0.5rem 0;
   font-size: 0.9rem;
+}
+.kitchen-hint {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: #666;
+}
+.status-select {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.875rem;
 }
 .loading {
   color: #666;

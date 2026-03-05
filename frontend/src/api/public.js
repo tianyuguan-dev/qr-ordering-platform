@@ -37,12 +37,17 @@ export function getPublicTables(restaurantId) {
 /**
  * @param {string} restaurantId
  * @param {{ tableId: number, items: Array<{ menuItemId: number, quantity: number }>, customerNotes?: string }} body
+ * @param {{ idempotencyKey?: string }} [options] - idempotencyKey to prevent duplicate orders on retry
  * @returns {Promise<{ id, orderNumber, tableId, status, totalAmount, items, ... }>}
  */
-export function createOrder(restaurantId, body) {
+export function createOrder(restaurantId, body, options = {}) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (options.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey
+  }
   return fetch(`${API_BASE}/public/restaurants/${encodeURIComponent(restaurantId)}/orders`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
   }).then((res) => {
     if (!res.ok) {

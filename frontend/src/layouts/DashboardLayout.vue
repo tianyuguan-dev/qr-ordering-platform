@@ -12,7 +12,12 @@ const user = computed(() => {
 })
 const isPlatformAdmin = computed(() => user.value?.roleName === 'PLATFORM_ADMIN')
 const isRestaurantAdmin = computed(() => user.value?.roleName === 'RESTAURANT_ADMIN')
+const isWaiter = computed(() => user.value?.roleName === 'WAITER')
+const isKitchen = computed(() => user.value?.roleName === 'KITCHEN')
 const showManageAdmins = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value)
+const showOrders = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value || isWaiter.value || isKitchen.value)
+const showTables = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value || isWaiter.value)
+const showMenu = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value || isKitchen.value)
 
 function logout() {
   setToken(null)
@@ -46,13 +51,17 @@ function logout() {
           <span class="nav-icon">▣</span>
           <span>Staff</span>
         </router-link>
-        <router-link v-if="isPlatformAdmin || isRestaurantAdmin" to="/menu" class="nav-item" active-class="active">
+        <router-link v-if="showMenu" to="/menu" class="nav-item" active-class="active">
           <span class="nav-icon">☰</span>
           <span>Menu</span>
         </router-link>
-        <router-link v-if="isPlatformAdmin || isRestaurantAdmin" to="/tables" class="nav-item" active-class="active">
+        <router-link v-if="showTables" to="/tables" class="nav-item" active-class="active">
           <span class="nav-icon">▢</span>
           <span>Tables</span>
+        </router-link>
+        <router-link v-if="showOrders" to="/orders" class="nav-item" active-class="active">
+          <span class="nav-icon">📋</span>
+          <span>Orders</span>
         </router-link>
         <router-link to="/profile" class="nav-item" active-class="active">
           <span class="nav-icon">○</span>
