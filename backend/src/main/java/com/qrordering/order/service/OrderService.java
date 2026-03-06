@@ -15,6 +15,10 @@ import com.qrordering.order.dto.response.TableCheckoutSummaryResponse;
 import com.qrordering.order.entity.OrderInfo;
 import com.qrordering.order.entity.OrderItem;
 import com.qrordering.order.enums.OrderStatus;
+import com.qrordering.event.dto.OrderCreatedEventPayload;
+import com.qrordering.event.dto.OrderStatusChangedEventPayload;
+import com.qrordering.event.service.OutboxService;
+import com.qrordering.observability.MetricsService;
 import com.qrordering.order.repository.OrderInfoRepository;
 import com.qrordering.restaurant.repository.RestaurantRepository;
 import com.qrordering.table.entity.TableInfo;
@@ -29,17 +33,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.slf4j.MDC;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @Service
 @RequiredArgsConstructor
 public class OrderService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
     private final OrderInfoRepository orderInfoRepository;
     private final TableInfoRepository tableInfoRepository;
@@ -47,6 +59,8 @@ public class OrderService {
     private final RestaurantRepository restaurantRepository;
     private final OrderStateMachine orderStateMachine;
     private final IdempotencyService idempotencyService;
+    private final OutboxService outboxService;
+    private final MetricsService metricsService;
 
     private String resolveTenantId(String restaurantId) {
         if ("me".equalsIgnoreCase(restaurantId)) {
@@ -87,6 +101,12 @@ public class OrderService {
 
     @Transactional
     public OrderResponse createOrder(String restaurantId, CreateOrderRequest request, String idempotencyKey) {
+        MDC.put("tenantId", restaurantId);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            MDC.put("idempotencyKey", idempotencyKey);
+        }
+        log.info("Creating order: tableId={}, itemCount={}", request.getTableId(), request.getItems().size());
+
         if (!restaurantRepository.existsById(restaurantId)) {
             throw new ResourceNotFoundException("Restaurant", restaurantId);
         }
@@ -160,6 +180,33 @@ public class OrderService {
             }
         }
 
+        String tableNumber = tableInfoRepository.findById(table.getId()).map(TableInfo::getTableNumber).orElse(null);
+        List<OrderCreatedEventPayload.OrderItemDto> itemDtos = newOrderItems.stream()
+                .map(oi -> {
+                    MenuItem mi = itemMap.get(oi.getMenuItemId());
+                    return new OrderCreatedEventPayload.OrderItemDto(
+                            oi.getMenuItemId(),
+                            mi != null ? mi.getName() : null,
+                            oi.getQuantity(),
+                            oi.getUnitPrice(),
+                            oi.getSubtotal());
+                })
+                .toList();
+        OrderCreatedEventPayload createdPayload = OrderCreatedEventPayload.builder()
+                .tenantId(restaurantId)
+                .orderId(order.getId())
+                .orderNumber(order.getOrderNumber())
+                .tableId(table.getId())
+                .tableNumber(tableNumber)
+                .totalAmount(newItemsTotal)
+                .items(itemDtos)
+                .occurredAt(Instant.now())
+                .build();
+        outboxService.publish("OrderCreatedEvent", restaurantId, order.getId(), createdPayload);
+        metricsService.recordOrderCreated(restaurantId);
+
+        MDC.put("orderId", order.getId().toString());
+        log.info("Order created successfully: orderNumber={}, totalAmount={}", order.getOrderNumber(), order.getTotalAmount());
         return toResponse(order, itemMap);
     }
 
@@ -231,11 +278,22 @@ public class OrderService {
         return toResponse(order, itemMap);
     }
 
-    public Page<OrderResponse> list(String restaurantId, Integer statusCode, Pageable pageable) {
+    public Page<OrderResponse> list(String restaurantId, List<Integer> statusCodes, Pageable pageable) {
         String tenantId = resolveTenantId(restaurantId);
-        Page<OrderInfo> page = statusCode != null
-                ? orderInfoRepository.findByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, OrderStatus.fromCode(statusCode), pageable)
-                : orderInfoRepository.findByTenantIdOrderByCreatedAtDesc(tenantId, pageable);
+        Page<OrderInfo> page;
+        if (statusCodes != null && !statusCodes.isEmpty()) {
+            List<OrderStatus> statuses = statusCodes.stream()
+                    .map(OrderStatus::tryFromCode)
+                    .flatMap(Optional::stream)
+                    .toList();
+            if (statuses.isEmpty()) {
+                page = orderInfoRepository.findByTenantIdOrderByCreatedAtDesc(tenantId, pageable);
+            } else {
+                page = orderInfoRepository.findByTenantIdAndStatusInOrderByCreatedAtDesc(tenantId, statuses, pageable);
+            }
+        } else {
+            page = orderInfoRepository.findByTenantIdOrderByCreatedAtDesc(tenantId, pageable);
+        }
         return page.map(this::toResponse);
     }
 
@@ -286,19 +344,32 @@ public class OrderService {
     @Transactional
     public OrderResponse updateOrderStatus(String restaurantId, Long orderId, Integer statusCode) {
         String tenantId = resolveTenantId(restaurantId);
+        MDC.put("tenantId", tenantId);
+        MDC.put("orderId", orderId.toString());
+
         OrderInfo order = orderInfoRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order", String.valueOf(orderId)));
         if (!order.getTenantId().equals(tenantId)) {
             throw new ResourceNotFoundException("Order", String.valueOf(orderId));
         }
+        OrderStatus oldStatus = order.getStatus();
         OrderStatus newStatus = OrderStatus.fromCode(statusCode);
-        orderStateMachine.validateTransition(order.getStatus(), newStatus);
+        orderStateMachine.validateTransition(oldStatus, newStatus);
         validateRoleCanTransitionTo(newStatus);
         order.setStatus(newStatus);
         order = orderInfoRepository.save(order);
         if (newStatus == OrderStatus.COMPLETED || newStatus == OrderStatus.CANCELLED) {
             setTableAvailableIfNeeded(order.getTenantId(), order.getTableId());
         }
+        OrderStatusChangedEventPayload statusPayload = OrderStatusChangedEventPayload.builder()
+                .tenantId(tenantId)
+                .orderId(orderId)
+                .oldStatus(oldStatus.getCode())
+                .newStatus(newStatus.getCode())
+                .occurredAt(Instant.now())
+                .build();
+        outboxService.publish("OrderStatusChangedEvent", tenantId, orderId, statusPayload);
+        metricsService.recordOrderStatusChanged(tenantId, oldStatus, newStatus);
         return toResponse(order);
     }
 

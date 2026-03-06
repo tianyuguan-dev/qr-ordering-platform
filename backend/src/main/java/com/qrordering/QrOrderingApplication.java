@@ -1,5 +1,7 @@
 package com.qrordering;
 
+import com.qrordering.auth.config.JwtProperties;
+import com.qrordering.auth.config.PlatformBootstrapProperties;
 import com.qrordering.config.CustomerBaseUrlProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -13,7 +15,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication
 @EnableScheduling  // Enable scheduled tasks for Outbox Processor
-@EnableConfigurationProperties(CustomerBaseUrlProperties.class)
+@EnableConfigurationProperties({
+    CustomerBaseUrlProperties.class,
+    JwtProperties.class,
+    PlatformBootstrapProperties.class
+})
 public class QrOrderingApplication {
 
     public static void main(String[] args) {

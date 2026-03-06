@@ -18,7 +18,7 @@ spring:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: validate  # Schema managed by Flyway, don't auto-create
-    show-sql: true        # Show SQL in development
+    show-sql: false       # Set true to log SQL in development
     properties:
       hibernate:
         format_sql: true
@@ -54,8 +54,8 @@ logging:
   level:
     root: INFO
     com.qrordering: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 

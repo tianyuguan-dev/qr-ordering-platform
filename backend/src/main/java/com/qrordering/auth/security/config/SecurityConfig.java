@@ -1,11 +1,8 @@
 package com.qrordering.auth.security.config;
 
-import com.qrordering.auth.config.JwtProperties;
-import com.qrordering.auth.config.PlatformBootstrapProperties;
 import com.qrordering.auth.security.Http401EntryPoint;
 import com.qrordering.auth.security.Http403AccessDeniedHandler;
 import com.qrordering.auth.security.filter.JwtAuthenticationFilter;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -31,7 +28,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
-@EnableConfigurationProperties({JwtProperties.class, PlatformBootstrapProperties.class})
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -52,7 +48,7 @@ public class SecurityConfig {
             // Disable CSRF (not needed for REST APIs)
             .csrf(csrf -> csrf.disable())
 
-            // JWT filter before username/password auth
+            // MdcFilter and SseTokenQueryFilter are registered as global filters (run before security chain)
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
             // Configure authorization rules
@@ -94,6 +90,8 @@ public class SecurityConfig {
                 // Orders: restaurant admin, waiter, kitchen can list and update status
                 .requestMatchers("/restaurants/me/orders", "/restaurants/me/orders/**").hasAnyRole("RESTAURANT_ADMIN", "WAITER", "KITCHEN")
                 .requestMatchers("/restaurants/*/orders", "/restaurants/*/orders/**").hasRole("PLATFORM_ADMIN")
+                // SSE: same roles as orders (token can be in query for EventSource)
+                .requestMatchers(HttpMethod.GET, "/sse/subscribe/**").hasAnyRole("RESTAURANT_ADMIN", "WAITER", "KITCHEN", "PLATFORM_ADMIN")
                 // Public API (customer H5: menu, tables, submit order) - no auth
                 .requestMatchers("/public/**").permitAll()
                 // Restaurant: only platform admin can create/update/delete/list

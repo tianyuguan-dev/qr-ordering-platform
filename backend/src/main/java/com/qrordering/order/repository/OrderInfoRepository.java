@@ -16,6 +16,8 @@ public interface OrderInfoRepository extends JpaRepository<OrderInfo, Long> {
 
     Page<OrderInfo> findByTenantIdAndStatusOrderByCreatedAtDesc(String tenantId, OrderStatus status, Pageable pageable);
 
+    Page<OrderInfo> findByTenantIdAndStatusInOrderByCreatedAtDesc(String tenantId, List<OrderStatus> statusIn, Pageable pageable);
+
     /** Count active orders for table (to decide if table can be set back to AVAILABLE). */
     long countByTenantIdAndTableIdAndStatusIn(String tenantId, Long tableId, List<OrderStatus> statusIn);
 

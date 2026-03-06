@@ -14,6 +14,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/restaurants/{restaurantId}/orders")
 @RequiredArgsConstructor
@@ -23,10 +25,10 @@ public class OrderController {
     private final OrderService orderService;
 
     @GetMapping
-    @Operation(summary = "List orders (paginated)")
+    @Operation(summary = "List orders (paginated). Filter by one or more statuses (e.g. status=1&status=4).")
     public ResponseEntity<Page<OrderResponse>> list(
             @PathVariable String restaurantId,
-            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) List<Integer> status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 

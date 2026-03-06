@@ -1,7 +1,8 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount, provide } from 'vue'
 import { RouterView } from 'vue-router'
 import { setToken } from '../api/client'
+import { useOrderEvents } from '../composables/useOrderEvents'
 
 const user = computed(() => {
   try {
@@ -18,6 +19,20 @@ const showManageAdmins = computed(() => isPlatformAdmin.value || isRestaurantAdm
 const showOrders = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value || isWaiter.value || isKitchen.value)
 const showTables = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value || isWaiter.value)
 const showMenu = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value || isKitchen.value)
+
+const { lastOrderEvent, setRestaurantIdForSse } = useOrderEvents()
+provide('orderEvents', { lastOrderEvent, setRestaurantIdForSse })
+
+onMounted(() => {
+  if (isRestaurantAdmin.value || isWaiter.value || isKitchen.value) {
+    setRestaurantIdForSse('me')
+  }
+})
+onBeforeUnmount(() => {
+  if (isRestaurantAdmin.value || isWaiter.value || isKitchen.value) {
+    setRestaurantIdForSse(null)
+  }
+})
 
 function logout() {
   setToken(null)

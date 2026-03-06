@@ -1,10 +1,14 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { getRestaurants } from '../api/restaurants'
 import { getOrders, getOrder, updateOrderStatus } from '../api/orders'
 import { setToken } from '../api/client'
 import { toast } from '../utils/toast'
+
+const ORDER_FILTER_STORAGE_KEY = 'ordersFilterStatuses'
+
+const orderEvents = inject('orderEvents', null)
 
 const STATUS_LIST = [
   { code: 1, label: 'Created' },
@@ -15,6 +19,25 @@ const STATUS_LIST = [
   { code: 6, label: 'Completed' },
   { code: 7, label: 'Cancelled' },
 ]
+
+function loadSavedFilterStatuses() {
+  try {
+    const raw = localStorage.getItem(ORDER_FILTER_STORAGE_KEY)
+    if (!raw) return []
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return []
+    const validCodes = STATUS_LIST.map((s) => s.code)
+    return arr.filter((c) => typeof c === 'number' && validCodes.includes(c))
+  } catch (_) {
+    return []
+  }
+}
+
+function saveFilterStatuses(codes) {
+  try {
+    localStorage.setItem(ORDER_FILTER_STORAGE_KEY, JSON.stringify(codes))
+  } catch (_) {}
+}
 
 // Allowed next statuses by state machine (admin / platform admin: all valid transitions)
 const NEXT_STATUS_ADMIN = {
@@ -70,7 +93,8 @@ const effectiveRestaurantId = computed(() => {
 const pageData = ref({ content: [], totalElements: 0, totalPages: 0 })
 const loading = ref(false)
 const error = ref('')
-const filterStatus = ref(null)
+const filterStatuses = ref(loadSavedFilterStatuses())
+const statusDropdownOpen = ref(false)
 const currentPage = ref(0)
 const pageSize = 20
 
@@ -114,7 +138,7 @@ async function loadOrders() {
   error.value = ''
   try {
     const res = await getOrders(rid, {
-      status: filterStatus.value ?? undefined,
+      status: filterStatuses.value.length ? filterStatuses.value : undefined,
       page: currentPage.value,
       size: pageSize,
     })
@@ -171,24 +195,90 @@ function closeDetail() {
   detailOrder.value = null
 }
 
+const statusDropdownRef = ref(null)
+function onDocumentClick(e) {
+  if (statusDropdownRef.value && !statusDropdownRef.value.contains(e.target)) {
+    closeStatusDropdown()
+  }
+}
+
 onMounted(async () => {
+  document.addEventListener('click', onDocumentClick)
   await loadRestaurants()
-  if (effectiveRestaurantId.value) await loadOrders()
+  if (effectiveRestaurantId.value) {
+    await loadOrders()
+  }
+  if (orderEvents && isPlatformAdmin.value) {
+    orderEvents.setRestaurantIdForSse(effectiveRestaurantId.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocumentClick)
+  if (orderEvents && isPlatformAdmin.value) {
+    orderEvents.setRestaurantIdForSse(null)
+  }
 })
 
 watch(effectiveRestaurantId, (val) => {
   if (val) {
     currentPage.value = 0
     loadOrders()
+    if (orderEvents && isPlatformAdmin.value) {
+      orderEvents.setRestaurantIdForSse(val)
+    }
   } else {
+    if (orderEvents && isPlatformAdmin.value) {
+      orderEvents.setRestaurantIdForSse(null)
+    }
     pageData.value = { content: [], totalElements: 0, totalPages: 0 }
   }
 })
 
-watch(filterStatus, () => {
+watch(
+  () => orderEvents?.lastOrderEvent?.value,
+  (ev) => {
+    if (ev && effectiveRestaurantId.value) {
+      loadOrders()
+    }
+  },
+  { deep: true }
+)
+
+function toggleStatus(code) {
+  const idx = filterStatuses.value.indexOf(code)
+  if (idx === -1) filterStatuses.value = [...filterStatuses.value, code]
+  else filterStatuses.value = filterStatuses.value.filter((c) => c !== code)
+  saveFilterStatuses(filterStatuses.value)
+}
+
+function selectAllStatuses() {
+  filterStatuses.value = STATUS_LIST.map((s) => s.code)
+  saveFilterStatuses(filterStatuses.value)
+}
+
+function clearStatusFilter() {
+  filterStatuses.value = []
+  saveFilterStatuses(filterStatuses.value)
+}
+
+const isAllSelected = computed(() => filterStatuses.value.length === STATUS_LIST.length)
+const statusFilterLabel = computed(() => {
+  if (filterStatuses.value.length === 0) return 'All statuses'
+  if (filterStatuses.value.length === STATUS_LIST.length) return 'All statuses'
+  return filterStatuses.value
+    .map((c) => STATUS_LIST.find((s) => s.code === c)?.label ?? c)
+    .join(', ')
+})
+
+function closeStatusDropdown() {
+  statusDropdownOpen.value = false
+}
+
+watch(filterStatuses, () => {
   currentPage.value = 0
   loadOrders()
-})
+}, { deep: true })
 </script>
 
 <template>
@@ -206,12 +296,26 @@ watch(filterStatus, () => {
       <div class="panel">
         <div class="panel-header">
           <span>Order list</span>
-          <div class="filter">
+          <div class="filter" ref="statusDropdownRef">
             <label>Status:</label>
-            <select v-model="filterStatus" class="filter-select">
-              <option :value="null">All</option>
-              <option v-for="s in STATUS_LIST" :key="s.code" :value="s.code">{{ s.label }}</option>
-            </select>
+            <div class="status-dropdown">
+              <button type="button" class="status-dropdown-trigger" @click.stop="statusDropdownOpen = !statusDropdownOpen" :aria-expanded="statusDropdownOpen">
+                {{ statusFilterLabel }}
+                <span class="status-dropdown-arrow">▼</span>
+              </button>
+              <div v-show="statusDropdownOpen" class="status-dropdown-panel">
+                <div class="status-dropdown-actions">
+                  <button type="button" class="status-dropdown-btn" @click.stop="selectAllStatuses">{{ isAllSelected ? '✓ ' : '' }}Select all</button>
+                  <button type="button" class="status-dropdown-btn" @click.stop="clearStatusFilter">Clear</button>
+                </div>
+                <div class="status-dropdown-list">
+                  <label v-for="s in STATUS_LIST" :key="s.code" class="status-dropdown-item">
+                    <input type="checkbox" :checked="filterStatuses.includes(s.code)" @change="toggleStatus(s.code)" />
+                    <span>{{ s.label }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <p v-if="error" class="error">{{ error }}</p>
@@ -340,6 +444,81 @@ watch(filterStatus, () => {
   padding: 0.35rem 0.6rem;
   border: 1px solid #ddd;
   border-radius: 6px;
+}
+.status-dropdown {
+  position: relative;
+}
+.status-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 180px;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  color: #213547;
+}
+.status-dropdown-trigger:hover {
+  border-color: #646cff;
+}
+.status-dropdown-arrow {
+  margin-left: auto;
+  font-size: 0.65rem;
+  opacity: 0.7;
+}
+.status-dropdown-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  min-width: 200px;
+  padding: 0.5rem 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 50;
+}
+.status-dropdown-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 0.5rem 0.5rem;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 0.5rem;
+}
+.status-dropdown-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  border: none;
+  background: #f0f2f5;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #213547;
+}
+.status-dropdown-btn:hover {
+  background: #e0e0e0;
+}
+.status-dropdown-list {
+  max-height: 220px;
+  overflow-y: auto;
+}
+.status-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.status-dropdown-item:hover {
+  background: #f5f5f5;
+}
+.status-dropdown-item input {
+  margin: 0;
 }
 .error {
   color: #c33;

@@ -63,6 +63,11 @@ public class OrderInfo {
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
 
+    /** Explicit getter so runtime always has getItems() (avoids NoSuchMethodError when Lombok not applied). */
+    public List<OrderItem> getItems() {
+        return items;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
