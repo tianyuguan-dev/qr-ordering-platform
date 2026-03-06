@@ -1,12 +1,12 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? '/api'
 
 export function getToken() {
-  return localStorage.getItem('accessToken')
+  return sessionStorage.getItem('accessToken')
 }
 
 export function setToken(token) {
-  if (token) localStorage.setItem('accessToken', token)
-  else localStorage.removeItem('accessToken')
+  if (token) sessionStorage.setItem('accessToken', token)
+  else sessionStorage.removeItem('accessToken')
 }
 
 /**
@@ -27,7 +27,7 @@ export async function apiFetch(path, options = {}) {
   if (!res.ok) {
     if (res.status === 401) {
       setToken(null)
-      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
       window.location.href = '/login'
     }
     let message = await res.text()

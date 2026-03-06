@@ -15,6 +15,15 @@ import java.util.List;
 
 /**
  * Poll outbox and publish events to Redis. TECH_DESIGN_V2 §4.3
+ *
+ * <p>Concurrency note: the entire {@link #processOutbox()} runs in a single transaction.
+ * STATUS_PROCESSING is written but only committed when the method returns, so it does NOT
+ * prevent a second instance from picking up the same NEW event concurrently. For multi-instance
+ * deployments, use {@code SELECT FOR UPDATE SKIP LOCKED} in the repository query. This
+ * single-instance design is intentional for simplicity in the current deployment model.
+ *
+ * <p>Failure safety: if publishing fails, {@link #handleFailure} resets the event to STATUS_NEW
+ * (with exponential back-off) so it is retried on the next scheduled run.
  */
 @Component
 @RequiredArgsConstructor

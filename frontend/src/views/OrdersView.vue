@@ -6,7 +6,13 @@ import { getOrders, getOrder, updateOrderStatus } from '../api/orders'
 import { setToken } from '../api/client'
 import { toast } from '../utils/toast'
 
-const ORDER_FILTER_STORAGE_KEY = 'ordersFilterStatuses'
+function getFilterStorageKey() {
+  try {
+    const user = JSON.parse(sessionStorage.getItem('user') || 'null')
+    if (user && user.userId) return `ordersFilterStatuses_${user.userId}`
+  } catch (_) {}
+  return 'ordersFilterStatuses'
+}
 
 const orderEvents = inject('orderEvents', null)
 
@@ -22,7 +28,7 @@ const STATUS_LIST = [
 
 function loadSavedFilterStatuses() {
   try {
-    const raw = localStorage.getItem(ORDER_FILTER_STORAGE_KEY)
+    const raw = localStorage.getItem(getFilterStorageKey())
     if (!raw) return []
     const arr = JSON.parse(raw)
     if (!Array.isArray(arr)) return []
@@ -35,7 +41,7 @@ function loadSavedFilterStatuses() {
 
 function saveFilterStatuses(codes) {
   try {
-    localStorage.setItem(ORDER_FILTER_STORAGE_KEY, JSON.stringify(codes))
+    localStorage.setItem(getFilterStorageKey(), JSON.stringify(codes))
   } catch (_) {}
 }
 
@@ -74,7 +80,7 @@ const router = useRouter()
 const route = useRoute()
 const user = computed(() => {
   try {
-    return JSON.parse(localStorage.getItem('user') || 'null')
+    return JSON.parse(sessionStorage.getItem('user') || 'null')
   } catch (_) {
     return null
   }
@@ -146,7 +152,7 @@ async function loadOrders() {
   } catch (e) {
     if (e.status === 401) {
       setToken(null)
-      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
       await router.push('/login')
       return
     }

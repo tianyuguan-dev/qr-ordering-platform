@@ -30,7 +30,7 @@ async function load() {
   } catch (e) {
     if (e.status === 401) {
       setToken(null)
-      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
       await router.push('/login')
       return
     }

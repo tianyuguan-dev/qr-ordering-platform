@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 const user = computed(() => {
   try {
-    return JSON.parse(localStorage.getItem('user') || 'null')
+    return JSON.parse(sessionStorage.getItem('user') || 'null')
   } catch (_) {
     return null
   }

@@ -27,7 +27,7 @@ export async function uploadImage(file, options = {}) {
   if (!res.ok) {
     if (res.status === 401) {
       setToken(null)
-      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
       window.location.href = '/login'
     }
     let message = await res.text()

@@ -17,7 +17,7 @@ const lastOrderEvent = ref(null)
 
 function getRole() {
   try {
-    const user = JSON.parse(localStorage.getItem('user') || 'null')
+    const user = JSON.parse(sessionStorage.getItem('user') || 'null')
     return user?.roleName || null
   } catch (_) {
     return null

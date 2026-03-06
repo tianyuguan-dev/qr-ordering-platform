@@ -38,8 +38,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -239,6 +240,14 @@ public class OrderService {
     }
 
     private OrderResponse toResponse(OrderInfo order, Map<Long, MenuItem> itemMap) {
+        return toResponse(order, itemMap, null);
+    }
+
+    /**
+     * Build an OrderResponse using pre-loaded lookup maps to avoid N+1 queries.
+     * Pass null for tableNumberMap to fall back to a single DB lookup (for single-order use cases).
+     */
+    private OrderResponse toResponse(OrderInfo order, Map<Long, MenuItem> itemMap, Map<Long, String> tableNumberMap) {
         List<OrderResponse.OrderItemResponse> itemResponses = order.getItems().stream()
                 .map(oi -> {
                     MenuItem mi = itemMap != null ? itemMap.get(oi.getMenuItemId()) : null;
@@ -251,9 +260,9 @@ public class OrderService {
                     );
                 })
                 .toList();
-        String tableNumber = tableInfoRepository.findById(order.getTableId())
-                .map(TableInfo::getTableNumber)
-                .orElse(null);
+        String tableNumber = tableNumberMap != null
+                ? tableNumberMap.get(order.getTableId())
+                : tableInfoRepository.findById(order.getTableId()).map(TableInfo::getTableNumber).orElse(null);
         return OrderResponse.builder()
                 .id(order.getId())
                 .orderNumber(order.getOrderNumber())
@@ -294,7 +303,22 @@ public class OrderService {
         } else {
             page = orderInfoRepository.findByTenantIdOrderByCreatedAtDesc(tenantId, pageable);
         }
-        return page.map(this::toResponse);
+
+        // Batch-load table numbers and menu items to avoid N+1 queries
+        List<OrderInfo> orders = page.getContent();
+        if (orders.isEmpty()) {
+            return page.map(o -> toResponse(o, Map.of(), Map.of()));
+        }
+        Set<Long> tableIds = orders.stream().map(OrderInfo::getTableId).collect(Collectors.toSet());
+        Map<Long, String> tableNumberMap = tableInfoRepository.findAllById(tableIds).stream()
+                .collect(Collectors.toMap(TableInfo::getId, TableInfo::getTableNumber));
+        Set<Long> menuItemIds = orders.stream()
+                .flatMap(o -> o.getItems().stream().map(OrderItem::getMenuItemId))
+                .collect(Collectors.toSet());
+        Map<Long, MenuItem> itemMap = menuItemIds.isEmpty() ? Map.of()
+                : menuItemRepository.findAllById(menuItemIds).stream()
+                        .collect(Collectors.toMap(MenuItem::getId, m -> m));
+        return page.map(o -> toResponse(o, itemMap, tableNumberMap));
     }
 
     public OrderResponse getById(String restaurantId, Long orderId) {
@@ -386,7 +410,17 @@ public class OrderService {
         BigDecimal tableTotal = activeOrders.stream()
                 .map(OrderInfo::getTotalAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        List<OrderResponse> orderResponses = activeOrders.stream().map(this::toResponse).toList();
+        // All orders share the same table; batch-load menu items to avoid N+1 queries
+        Map<Long, String> tableNumberMap = Map.of(tableId, table.getTableNumber());
+        Set<Long> menuItemIds = activeOrders.stream()
+                .flatMap(o -> o.getItems().stream().map(OrderItem::getMenuItemId))
+                .collect(Collectors.toSet());
+        Map<Long, MenuItem> itemMap = menuItemIds.isEmpty() ? Map.of()
+                : menuItemRepository.findAllById(menuItemIds).stream()
+                        .collect(Collectors.toMap(MenuItem::getId, m -> m));
+        List<OrderResponse> orderResponses = activeOrders.stream()
+                .map(o -> toResponse(o, itemMap, tableNumberMap))
+                .toList();
         return TableCheckoutSummaryResponse.builder()
                 .tableId(table.getId())
                 .tableNumber(table.getTableNumber())

@@ -18,7 +18,7 @@ const router = useRouter()
 const route = useRoute()
 const user = computed(() => {
   try {
-    return JSON.parse(localStorage.getItem('user') || 'null')
+    return JSON.parse(sessionStorage.getItem('user') || 'null')
   } catch (_) {
     return null
   }
@@ -99,7 +99,7 @@ async function loadCategories() {
   } catch (e) {
     if (e.status === 401) {
       setToken(null)
-      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
       await router.push('/login')
       return
     }
@@ -127,7 +127,7 @@ async function loadItems() {
   } catch (e) {
     if (e.status === 401) {
       setToken(null)
-      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
       await router.push('/login')
       return
     }
@@ -352,7 +352,7 @@ async function loadKitchenItems() {
   } catch (e) {
     if (e.status === 401) {
       setToken(null)
-      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
       await router.push('/login')
     } else toast(e.message || 'Failed to load items', 'error')
   } finally {

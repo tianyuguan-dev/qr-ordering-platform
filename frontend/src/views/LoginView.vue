@@ -25,7 +25,7 @@ async function onSubmit() {
       password: password.value,
     })
     setToken(res.accessToken)
-    localStorage.setItem('user', JSON.stringify({
+    sessionStorage.setItem('user', JSON.stringify({
       userId: res.userId,
       tenantId: res.tenantId,
       username: res.username,

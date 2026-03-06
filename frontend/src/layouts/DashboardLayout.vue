@@ -6,7 +6,7 @@ import { useOrderEvents } from '../composables/useOrderEvents'
 
 const user = computed(() => {
   try {
-    return JSON.parse(localStorage.getItem('user') || 'null')
+    return JSON.parse(sessionStorage.getItem('user') || 'null')
   } catch (_) {
     return null
   }
@@ -36,7 +36,7 @@ onBeforeUnmount(() => {
 
 function logout() {
   setToken(null)
-  localStorage.removeItem('user')
+  sessionStorage.removeItem('user')
   window.location.href = '/login'
 }
 </script>

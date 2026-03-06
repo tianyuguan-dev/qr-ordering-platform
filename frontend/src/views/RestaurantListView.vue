@@ -33,7 +33,7 @@ const deleteConfirm = ref(null) // { id, name }
 
 const user = computed(() => {
   try {
-    return JSON.parse(localStorage.getItem('user') || 'null')
+    return JSON.parse(sessionStorage.getItem('user') || 'null')
   } catch (_) {
     return null
   }
@@ -56,7 +56,7 @@ async function loadList() {
   } catch (e) {
     if (e.status === 401) {
       setToken(null)
-      localStorage.removeItem('user')
+      sessionStorage.removeItem('user')
       await router.push('/login')
       return
     }
