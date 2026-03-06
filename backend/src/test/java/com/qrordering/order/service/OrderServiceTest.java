@@ -30,7 +30,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -123,8 +122,7 @@ class OrderServiceTest {
         void whenStatusNull_callsFindByTenantIdOrderByCreatedAtDesc() {
             Page<OrderInfo> page = new PageImpl<>(java.util.List.of(minimalOrder()));
             when(orderInfoRepository.findByTenantIdOrderByCreatedAtDesc(eq(TENANT_ID), eq(PAGEABLE))).thenReturn(page);
-            when(tableInfoRepository.findById(1L)).thenReturn(Optional.of(minimalTable()));
-            when(menuItemRepository.findAllById(any())).thenReturn(java.util.List.of());
+            when(tableInfoRepository.findAllById(any())).thenReturn(java.util.List.of(minimalTable()));
 
             Page<OrderResponse> result = orderService.list("me", null, PAGEABLE);
 
@@ -137,8 +135,7 @@ class OrderServiceTest {
         void whenStatusEmpty_callsFindByTenantIdOrderByCreatedAtDesc() {
             Page<OrderInfo> page = new PageImpl<>(java.util.List.of(minimalOrder()));
             when(orderInfoRepository.findByTenantIdOrderByCreatedAtDesc(eq(TENANT_ID), eq(PAGEABLE))).thenReturn(page);
-            when(tableInfoRepository.findById(1L)).thenReturn(Optional.of(minimalTable()));
-            when(menuItemRepository.findAllById(any())).thenReturn(java.util.List.of());
+            when(tableInfoRepository.findAllById(any())).thenReturn(java.util.List.of(minimalTable()));
 
             orderService.list("me", java.util.List.of(), PAGEABLE);
 
@@ -150,8 +147,7 @@ class OrderServiceTest {
             Page<OrderInfo> page = new PageImpl<>(java.util.List.of(minimalOrder()));
             when(orderInfoRepository.findByTenantIdAndStatusInOrderByCreatedAtDesc(
                     eq(TENANT_ID), eq(java.util.List.of(OrderStatus.CREATED, OrderStatus.CONFIRMED)), eq(PAGEABLE))).thenReturn(page);
-            when(tableInfoRepository.findById(1L)).thenReturn(Optional.of(minimalTable()));
-            when(menuItemRepository.findAllById(any())).thenReturn(java.util.List.of());
+            when(tableInfoRepository.findAllById(any())).thenReturn(java.util.List.of(minimalTable()));
 
             orderService.list("me", java.util.List.of(1, 2), PAGEABLE);
 
@@ -164,8 +160,7 @@ class OrderServiceTest {
             Page<OrderInfo> page = new PageImpl<>(java.util.List.of(minimalOrder()));
             when(orderInfoRepository.findByTenantIdAndStatusInOrderByCreatedAtDesc(
                     eq(TENANT_ID), eq(java.util.List.of(OrderStatus.CREATED)), eq(PAGEABLE))).thenReturn(page);
-            when(tableInfoRepository.findById(1L)).thenReturn(Optional.of(minimalTable()));
-            when(menuItemRepository.findAllById(any())).thenReturn(java.util.List.of());
+            when(tableInfoRepository.findAllById(any())).thenReturn(java.util.List.of(minimalTable()));
 
             orderService.list("me", java.util.List.of(1, 99, 999), PAGEABLE);
 
@@ -177,8 +172,7 @@ class OrderServiceTest {
         void whenAllStatusCodesInvalid_fallsBackToFindByTenantId() {
             Page<OrderInfo> page = new PageImpl<>(java.util.List.of(minimalOrder()));
             when(orderInfoRepository.findByTenantIdOrderByCreatedAtDesc(eq(TENANT_ID), eq(PAGEABLE))).thenReturn(page);
-            when(tableInfoRepository.findById(1L)).thenReturn(Optional.of(minimalTable()));
-            when(menuItemRepository.findAllById(any())).thenReturn(java.util.List.of());
+            when(tableInfoRepository.findAllById(any())).thenReturn(java.util.List.of(minimalTable()));
 
             orderService.list("me", java.util.List.of(0, 99), PAGEABLE);
 

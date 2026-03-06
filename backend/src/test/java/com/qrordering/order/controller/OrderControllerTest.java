@@ -1,5 +1,6 @@
 package com.qrordering.order.controller;
 
+import com.qrordering.auth.service.JwtService;
 import com.qrordering.order.dto.response.OrderResponse;
 import com.qrordering.order.service.OrderService;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,9 @@ class OrderControllerTest {
 
     @MockBean
     private OrderService orderService;
+
+    @MockBean
+    private JwtService jwtService;
 
     @Test
     @WithMockUser(roles = "RESTAURANT_ADMIN")
