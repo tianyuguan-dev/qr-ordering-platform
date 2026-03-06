@@ -30,6 +30,7 @@ public class OrderStateMachine {
     );
 
     public boolean canTransition(OrderStatus from, OrderStatus to) {
+        if (to == null) return false;
         Set<OrderStatus> allowed = TRANSITIONS.get(from);
         return allowed != null && allowed.contains(to);
     }
