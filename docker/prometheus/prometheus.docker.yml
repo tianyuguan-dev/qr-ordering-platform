@@ -1,0 +1,12 @@
+# Prometheus config for full-stack Docker Compose (backend runs as a container)
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'qr-ordering'
+    metrics_path: '/api/actuator/prometheus'
+    static_configs:
+      - targets: ['backend:8080']
+        labels:
+          app: 'qr-ordering'

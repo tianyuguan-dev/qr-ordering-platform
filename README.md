@@ -41,15 +41,35 @@ Infra / monitoring:
 
 ---
 
-## 2. Local development (one-command stack)
+## 2. Quick start (Docker, one command)
 
-### 2.1 Prerequisites
+Requires only Docker + Docker Compose — no JDK or Node.js needed locally.
 
-- JDK **17+** (project uses Java 17 language level; tests fully compatible up to Java 22)
+```bash
+docker-compose up -d --build
+```
+
+| Service | URL |
+|---|---|
+| Frontend (Vue SPA) | http://localhost |
+| Backend API | http://localhost/api |
+| Grafana | http://localhost:3001 (admin / admin) |
+| Prometheus | http://localhost:9090 |
+| MinIO console | http://localhost:9001 (minioadmin / minioadmin) |
+
+First startup takes a few minutes (Maven + npm builds run inside Docker). Subsequent starts are fast.
+
+---
+
+## 3. Local development (hot-reload)
+
+### 3.1 Prerequisites
+
+- JDK **17+**
 - Node.js **18+**
 - Docker + Docker Compose
 
-### 2.2 Start infrastructure + monitoring
+### 3.2 Start infrastructure + monitoring
 
 From project root:
 
@@ -65,7 +85,7 @@ Services:
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3001` (user `admin`, password `admin`)
 
-### 2.3 Run backend
+### 3.3 Run backend
 
 ```bash
 cd backend
@@ -77,7 +97,7 @@ Backend:
 - Base URL: `http://localhost:8080/api`
 - Actuator Prometheus endpoint: `http://localhost:8080/api/actuator/prometheus`
 
-### 2.4 Run frontend
+### 3.4 Run frontend
 
 ```bash
 cd frontend
@@ -92,9 +112,9 @@ Frontend dev server:
 
 ---
 
-## 3. Features (for recruiters)
+## 4. Features (for recruiters)
 
-### 3.1 Domain & roles
+### 4.1 Domain & roles
 
 - Restaurants, tables, menu categories/items
 - Orders with items and state machine:
@@ -106,7 +126,7 @@ Frontend dev server:
   - WAITER
   - KITCHEN
 
-### 3.2 Real-time order flow
+### 4.2 Real-time order flow
 
 - **Outbox pattern**:
   - Business code writes rows to `outbox_events` inside DB transaction
@@ -121,7 +141,7 @@ Frontend dev server:
   - Exposes `lastOrderEvent` and `setRestaurantIdForSse`
   - Layout injects this into child views, so **any page** can react to order events
 
-### 3.3 UX details (Waiter / Kitchen)
+### 4.3 UX details (Waiter / Kitchen)
 
 - Waiter / Restaurant admin:
   - Toast when **new order created** (“New order needs confirmation”)
@@ -135,7 +155,7 @@ Frontend dev server:
 
 ---
 
-## 4. Observability & monitoring
+## 5. Observability & monitoring
 
 - **Metrics** (`MetricsService`):
   - `orders.created`
@@ -157,9 +177,9 @@ Frontend dev server:
 
 ---
 
-## 5. Testing
+## 6. Testing
 
-### 5.1 Backend (JUnit + Spring Test)
+### 6.1 Backend (JUnit + Spring Test)
 
 Run:
 
@@ -189,7 +209,7 @@ Tests are split into three layers:
 
 - `RestaurantServiceIntegrationTest` — Flyway migration, JPA AttributeConverter (status as INTEGER), duplicate-name constraint, pagination filters, full CRUD round-trip
 
-### 5.2 Frontend (Vitest + Vue Test Utils)
+### 6.2 Frontend (Vitest + Vue Test Utils)
 
 Run:
 
@@ -216,7 +236,7 @@ npm run test:run
 
 ---
 
-## 6. Project structure
+## 7. Project structure
 
 ```text
 backend/
@@ -253,10 +273,17 @@ docker/
 
 ---
 
-## 7. Demo script (for interviews)
+## 8. Demo script (for interviews)
 
 ### Setup (< 2 min)
 
+**Option A — Docker only (recommended for demos):**
+```bash
+docker-compose up -d --build
+# Frontend: http://localhost  |  Grafana: http://localhost:3001
+```
+
+**Option B — local dev (hot-reload):**
 ```bash
 docker-compose -f docker-compose.dev.yml up -d   # infra + monitoring
 cd backend && mvn spring-boot:run &               # http://localhost:8080
