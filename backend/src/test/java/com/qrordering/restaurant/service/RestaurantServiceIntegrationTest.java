@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.*;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
         properties = {
                 "platform.bootstrap.enabled=false",
-                "spring.task.scheduling.pool.size=0"  // disable scheduled tasks during test
+                "spring.task.scheduling.pool.size=1"
         })
 @Testcontainers(disabledWithoutDocker = true)
 @Transactional
