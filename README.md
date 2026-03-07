@@ -55,7 +55,20 @@ Customer (browser)          Staff (browser)
 
 ---
 
-## 2. Quick start (Docker, one command)
+## 2. Screenshots
+
+**Staff dashboard — real-time order notification**
+![Staff dashboard with real-time toast notification](docs/screenshots/staff-orders-toast.png)
+
+**Customer ordering page (mobile)**
+![Customer menu and ordering page](docs/screenshots/customer-menu.png)
+
+**Grafana observability dashboard**
+![Grafana dashboard showing order rate, outbox backlog and SSE connections](docs/screenshots/grafana-dashboard.png)
+
+---
+
+## 3. Quick start (Docker, one command)
 
 Requires only Docker + Docker Compose — no JDK or Node.js needed.
 
@@ -67,25 +80,25 @@ Images are pre-built and pulled from Docker Hub. All services start in ~30 secon
 
 | Service | URL | Credentials |
 |---|---|---|
-| Frontend (Vue SPA) | http://localhost | see §8 |
+| Frontend (Vue SPA) | http://localhost | see §9 |
 | Backend API | http://localhost/api | — |
 | Grafana | http://localhost:3001 | admin / admin |
 | Prometheus | http://localhost:9090 | — |
 | MinIO console | http://localhost:9001 | minioadmin / minioadmin |
 
-**Demo data is seeded automatically on first startup** — two restaurants (Tokyo Sushi and Sichuan Hotpot), each with owner / waiter / kitchen accounts, a full menu with images, and tables. No manual setup required. See §8 for the demo walkthrough.
+**Demo data is seeded automatically on first startup** — two restaurants (Tokyo Sushi and Sichuan Hotpot), each with owner / waiter / kitchen accounts, a full menu with images, and tables. No manual setup required. See §9 for the demo walkthrough.
 
 ---
 
-## 3. Local development (hot-reload)
+## 4. Local development (hot-reload)
 
-### 3.1 Prerequisites
+### 4.1 Prerequisites
 
 - JDK **17+**
 - Node.js **18+**
 - Docker + Docker Compose
 
-### 3.2 Start infrastructure
+### 4.2 Start infrastructure
 
 ```bash
 # Start only infra (postgres, redis, minio, prometheus, grafana)
@@ -100,7 +113,7 @@ docker compose up -d postgres redis minio prometheus grafana
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3001` (admin / admin) |
 
-### 3.3 Run backend
+### 4.3 Run backend
 
 ```bash
 cd backend
@@ -110,7 +123,7 @@ mvn spring-boot:run
 - API base: `http://localhost:8080/api`
 - Prometheus endpoint: `http://localhost:8080/api/actuator/prometheus`
 
-### 3.4 Run frontend
+### 4.4 Run frontend
 
 ```bash
 cd frontend
@@ -122,9 +135,9 @@ npm run dev
 
 ---
 
-## 4. Technical highlights
+## 5. Technical highlights
 
-### 4.1 Outbox pattern & real-time flow
+### 5.1 Outbox pattern & real-time flow
 
 Why not publish to Redis directly from the service layer? Direct publishing breaks atomicity — if Redis is down or the app crashes after saving the order but before publishing, the event is lost. The Outbox pattern writes the event to the same DB transaction as the business change, so events are never lost regardless of downstream failures.
 
@@ -133,17 +146,17 @@ Why not publish to Redis directly from the service layer? Direct publishing brea
 - Idempotency: `processed_events` table prevents double-delivery if the processor crashes between Redis publish and DB commit
 - Dead-letter after 5 failed attempts with exponential back-off
 
-### 4.2 SSE vs WebSocket
+### 5.2 SSE vs WebSocket
 
 SSE is unidirectional (server → client), which is all that's needed here — clients send orders via REST, staff only need to *receive* notifications. SSE is simpler to proxy (plain HTTP), works natively in browsers without a library, and reconnects automatically.
 
 `SseController` accepts the JWT in a `?token=` query param (browsers can't set headers on `EventSource`).
 
-### 4.3 Multi-tenant isolation
+### 5.3 Multi-tenant isolation
 
 Every domain entity carries a `tenantId`. All queries are scoped to the tenant derived from the JWT, enforced in the service layer. Platform admin endpoints use a separate path prefix and role check.
 
-### 4.4 Order state machine
+### 5.4 Order state machine
 
 ```
 CREATED → CONFIRMED → PREPARING → READY → SERVED → COMPLETED
@@ -152,7 +165,7 @@ CREATED → CONFIRMED → PREPARING → READY → SERVED → COMPLETED
 
 Transitions are validated in `OrderStateMachine`; each role can only trigger transitions it owns (e.g. kitchen cannot confirm, waiter cannot mark ready).
 
-### 4.5 UX details
+### 5.5 UX details
 
 - Waiter / Restaurant admin: toast on new order ("New order needs confirmation") and when order is ready ("Order ready, please serve")
 - Kitchen: toast on confirmed order ("Order confirmed, please prepare") and when a confirmed/preparing order is cancelled ("Order cancelled, please discard")
@@ -161,7 +174,7 @@ Transitions are validated in `OrderStateMachine`; each role can only trigger tra
 
 ---
 
-## 5. Observability
+## 6. Observability
 
 - **Metrics** (`MetricsService`): `orders.created`, `orders.status.changed`, `outbox.backlog`, `outbox.dead`, `outbox.publish.failed`, `sse.connections`
 - **Health**: custom `OutboxHealthIndicator` at `/api/actuator/health` with backlog and dead-letter counts
@@ -170,9 +183,9 @@ Transitions are validated in `OrderStateMachine`; each role can only trigger tra
 
 ---
 
-## 6. Testing
+## 7. Testing
 
-### 6.1 Backend (JUnit + Spring Test)
+### 7.1 Backend (JUnit + Spring Test)
 
 ```bash
 cd backend && mvn test
@@ -190,7 +203,7 @@ cd backend && mvn test
 **Integration tests** (Testcontainers, real PostgreSQL 15 + Redis 7; runs in CI):
 - `RestaurantServiceIntegrationTest` — Flyway migration, JPA `AttributeConverter`, full CRUD round-trip
 
-### 6.2 Frontend (Vitest + Vue Test Utils)
+### 7.2 Frontend (Vitest + Vue Test Utils)
 
 ```bash
 cd frontend && npm run test:run
@@ -202,7 +215,7 @@ cd frontend && npm run test:run
 
 ---
 
-## 7. Project structure
+## 8. Project structure
 
 ```
 backend/src/main/java/com/qrordering/
@@ -229,7 +242,7 @@ frontend/src/
 
 ---
 
-## 8. Demo walkthrough
+## 9. Demo walkthrough
 
 ### Start
 
