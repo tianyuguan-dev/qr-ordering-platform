@@ -20,8 +20,8 @@ const showOrders = computed(() => isPlatformAdmin.value || isRestaurantAdmin.val
 const showTables = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value || isWaiter.value)
 const showMenu = computed(() => isPlatformAdmin.value || isRestaurantAdmin.value || isKitchen.value)
 
-const { lastOrderEvent, setRestaurantIdForSse } = useOrderEvents()
-provide('orderEvents', { lastOrderEvent, setRestaurantIdForSse })
+const { lastOrderEvent, lastConnectedAt, setRestaurantIdForSse } = useOrderEvents()
+provide('orderEvents', { lastOrderEvent, lastConnectedAt, setRestaurantIdForSse })
 
 onMounted(() => {
   if (isRestaurantAdmin.value || isWaiter.value || isKitchen.value) {

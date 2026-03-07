@@ -1,63 +1,79 @@
-## QR Ordering Platform
+# QR Ordering Platform
 
 [![CI](https://github.com/tianyuguan-dev/qr-ordering-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/tianyuguan-dev/qr-ordering-platform/actions/workflows/ci.yml)
 
-Multi-tenant QR code ordering platform for restaurants, built as a **recruitment-ready showcase** project.
+Multi-tenant QR code ordering platform for restaurants. Customers scan a table QR code to browse the menu and place orders from their phone. Kitchen and waiter staff manage orders in real time through role-specific dashboards.
 
-It demonstrates:
-
-- **Backend**: Spring Boot 3, PostgreSQL, Redis, MinIO, Flyway
-- **Architecture**: Outbox pattern + Redis event bus, SSE real-time updates, role-based access control
-- **Observability**: Actuator + Prometheus + Grafana dashboard, structured logs with trace/tenant/order IDs
-- **Frontend**: Vue 3 + Vite, role-specific dashboards, real-time toasts for new/ready orders
-- **Testing**: JUnit + Mockito, Vitest + Vue Test Utils
+**Stack**: Spring Boot 3 · PostgreSQL · Redis · MinIO · Vue 3 · Vite · Docker
 
 ---
 
-## 1. High-level architecture
+## 1. Architecture
 
-Backend (`/backend`):
+```
+Customer (browser)          Staff (browser)
+      │                          │
+      │ HTTP (public API)        │ HTTP + SSE
+      ▼                          ▼
+┌─────────────────────────────────────┐
+│           Spring Boot 3 API         │
+│  ┌──────────┐  ┌─────────────────┐  │
+│  │ REST API │  │  SSE Controller │  │
+│  └────┬─────┘  └────────┬────────┘  │
+│       │                 │           │
+│  ┌────▼─────────────────▼────────┐  │
+│  │    OrderService / domain      │  │
+│  └────┬──────────────────────────┘  │
+│       │ writes outbox_events        │
+│  ┌────▼──────────┐                  │
+│  │  OutboxProcessor (every 2s)   │  │
+│  └────┬──────────┘                  │
+└───────┼─────────────────────────────┘
+        │ publish
+        ▼
+     Redis Pub/Sub
+        │ subscribe
+        ▼
+  OrderEventConsumer
+        │ broadcast
+        ▼
+  SseEmitterManager ──► SSE stream ──► Staff browsers
+```
 
-- Spring Boot 3 REST API (`/api`)
-- Multi-tenant by `tenantId` (restaurant id) on all domain entities
-- Outbox table (`outbox_events`) + scheduled processor → publish domain events to Redis
-- SSE controller streams order events to logged-in staff (waiter/kitchen/admin)
-- Metrics via Actuator Prometheus endpoint
+**Backend** (`/backend`):
+- Spring Boot 3 REST API, multi-tenant by `tenantId` on all domain entities
+- Outbox pattern: business logic writes to `outbox_events` in the same DB transaction; a scheduler polls and publishes to Redis
+- SSE fan-out: `SseEmitterManager` broadcasts per-restaurant order events to connected staff
+- Role-based access control: `PLATFORM_ADMIN`, `RESTAURANT_ADMIN`, `WAITER`, `KITCHEN`
+- Flyway schema migrations, MinIO for image storage (logos, dish photos)
+- Prometheus metrics + custom health indicator
 
-Frontend (`/frontend`):
-
-- Vue 3 SPA with role-based layout:
-  - **Platform admin**: manage restaurants, platform admins
-  - **Restaurant admin**: manage staff, menu, tables, orders
-  - **Waiter / Kitchen**: order list with status transitions and real-time alerts
-- Global SSE composable so any page can react to order events
-
-Infra / monitoring:
-
-- PostgreSQL, Redis, MinIO via `docker-compose.dev.yml`
-- Prometheus + Grafana containers with pre-provisioned:
-  - Prometheus datasource
-  - “QR Ordering Platform” dashboard JSON
+**Frontend** (`/frontend`):
+- Vue 3 SPA, role-specific layouts and navigation
+- Global `useOrderEvents` composable — single `EventSource` for the whole app, injected via `provide/inject` so any view can react to order events without re-subscribing
+- `sessionStorage` for auth — multiple tabs with different roles (waiter + kitchen) don't overwrite each other
 
 ---
 
 ## 2. Quick start (Docker, one command)
 
-Requires only Docker + Docker Compose — no JDK or Node.js needed locally.
+Requires only Docker + Docker Compose — no JDK or Node.js needed.
 
 ```bash
-docker-compose up -d --build
+docker-compose up -d
 ```
 
-| Service | URL |
-|---|---|
-| Frontend (Vue SPA) | http://localhost |
-| Backend API | http://localhost/api |
-| Grafana | http://localhost:3001 (admin / admin) |
-| Prometheus | http://localhost:9090 |
-| MinIO console | http://localhost:9001 (minioadmin / minioadmin) |
+Images are pre-built and pulled from Docker Hub. All services start in ~30 seconds.
 
-First startup takes a few minutes (Maven + npm builds run inside Docker). Subsequent starts are fast.
+| Service | URL | Credentials |
+|---|---|---|
+| Frontend (Vue SPA) | http://localhost | see §8 |
+| Backend API | http://localhost/api | — |
+| Grafana | http://localhost:3001 | admin / admin |
+| Prometheus | http://localhost:9090 | — |
+| MinIO console | http://localhost:9001 | minioadmin / minioadmin |
+
+**Demo data is seeded automatically on first startup** — two restaurants (Tokyo Sushi and Sichuan Hotpot), each with owner / waiter / kitchen accounts, a full menu with images, and tables. No manual setup required. See §8 for the demo walkthrough.
 
 ---
 
@@ -69,21 +85,20 @@ First startup takes a few minutes (Maven + npm builds run inside Docker). Subseq
 - Node.js **18+**
 - Docker + Docker Compose
 
-### 3.2 Start infrastructure + monitoring
-
-From project root:
+### 3.2 Start infrastructure
 
 ```bash
-docker-compose -f docker-compose.dev.yml up -d
+# Start only infra (postgres, redis, minio, prometheus, grafana)
+docker-compose up -d postgres redis minio prometheus grafana
 ```
 
-Services:
-
-- PostgreSQL: `localhost:5433` (db: `qr_ordering`, user: `admin`, password: `password`)
-- Redis: `localhost:6379`
-- MinIO: `http://localhost:9000` (console `http://localhost:9001`, `minioadmin` / `minioadmin`)
-- Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3001` (user `admin`, password `admin`)
+| Service | Local address |
+|---|---|
+| PostgreSQL | `localhost:5432` (db: `qr_ordering`, user: `admin`, pass: `password`) |
+| Redis | `localhost:6379` |
+| MinIO | `http://localhost:9000` (console: `http://localhost:9001`) |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3001` (admin / admin) |
 
 ### 3.3 Run backend
 
@@ -92,10 +107,8 @@ cd backend
 mvn spring-boot:run
 ```
 
-Backend:
-
-- Base URL: `http://localhost:8080/api`
-- Actuator Prometheus endpoint: `http://localhost:8080/api/actuator/prometheus`
+- API base: `http://localhost:8080/api`
+- Prometheus endpoint: `http://localhost:8080/api/actuator/prometheus`
 
 ### 3.4 Run frontend
 
@@ -105,75 +118,55 @@ npm install
 npm run dev
 ```
 
-Frontend dev server:
-
-- Vite dev: `http://localhost:5173`
-- Proxies `/api` → `http://localhost:8080`
+- Dev server: `http://localhost:5173` (proxies `/api` → `http://localhost:8080`)
 
 ---
 
-## 4. Features (for recruiters)
+## 4. Technical highlights
 
-### 4.1 Domain & roles
+### 4.1 Outbox pattern & real-time flow
 
-- Restaurants, tables, menu categories/items
-- Orders with items and state machine:
-  - CREATED → CONFIRMED → PREPARING → READY → SERVED → COMPLETED
-  - CANCELLED as terminal branch
-- Roles:
-  - PLATFORM_ADMIN
-  - RESTAURANT_ADMIN
-  - WAITER
-  - KITCHEN
+Why not publish to Redis directly from the service layer? Direct publishing breaks atomicity — if Redis is down or the app crashes after saving the order but before publishing, the event is lost. The Outbox pattern writes the event to the same DB transaction as the business change, so events are never lost regardless of downstream failures.
 
-### 4.2 Real-time order flow
+- `outbox_events` table written inside the business transaction
+- `OutboxProcessor` (scheduled every 2s) polls `STATUS_NEW` rows and publishes to Redis
+- Idempotency: `processed_events` table prevents double-delivery if the processor crashes between Redis publish and DB commit
+- Dead-letter after 5 failed attempts with exponential back-off
 
-- **Outbox pattern**:
-  - Business code writes rows to `outbox_events` inside DB transaction
-  - `OutboxProcessor` (scheduled every 10s) reads NEW events, publishes to Redis channels
-  - `OrderEventConsumer` consumes Redis messages and routes to SSE clients
-- **SSE**:
-  - `SseController` exposes `/sse/subscribe/{restaurantId}` (or `me`)
-  - JWT can be in header or `token` query param (EventSource-friendly)
-  - Per-restaurant fan-out via `SseEmitterManager`
-- **Frontend SSE composable**:
-  - Single `EventSource` for the whole app (`useOrderEvents`)
-  - Exposes `lastOrderEvent` and `setRestaurantIdForSse`
-  - Layout injects this into child views, so **any page** can react to order events
+### 4.2 SSE vs WebSocket
 
-### 4.3 UX details (Waiter / Kitchen)
+SSE is unidirectional (server → client), which is all that's needed here — clients send orders via REST, staff only need to *receive* notifications. SSE is simpler to proxy (plain HTTP), works natively in browsers without a library, and reconnects automatically.
 
-- Waiter / Restaurant admin:
-  - Toast when **new order created** (“New order needs confirmation”)
-  - Toast when order **READY** (“Order ready, please serve”)
-- Kitchen:
-  - Toast when order **CONFIRMED** (“Order confirmed, please prepare”)
-- Orders list:
-  - Multi-select status filter with “Select all” / “Clear”
-  - Filter persisted to `localStorage` under a **per-user key** (`ordersFilterStatuses_{userId}`) so different staff keep independent preferences
-- **Multi-tab safe**: auth token and user session stored in `sessionStorage` — opening multiple tabs with different roles (waiter + kitchen) doesn't overwrite each other's session
+`SseController` accepts the JWT in a `?token=` query param (browsers can't set headers on `EventSource`).
+
+### 4.3 Multi-tenant isolation
+
+Every domain entity carries a `tenantId`. All queries are scoped to the tenant derived from the JWT, enforced in the service layer. Platform admin endpoints use a separate path prefix and role check.
+
+### 4.4 Order state machine
+
+```
+CREATED → CONFIRMED → PREPARING → READY → SERVED → COMPLETED
+                  └──────────────────────────────────► CANCELLED
+```
+
+Transitions are validated in `OrderStateMachine`; each role can only trigger transitions it owns (e.g. kitchen cannot confirm, waiter cannot mark ready).
+
+### 4.5 UX details
+
+- Waiter / Restaurant admin: toast on new order ("New order needs confirmation") and when order is ready ("Order ready, please serve")
+- Kitchen: toast on confirmed order ("Order confirmed, please prepare") and when a confirmed/preparing order is cancelled ("Order cancelled, please discard")
+- Orders list: multi-select status filter, persisted to `localStorage` per user (`ordersFilterStatuses_{userId}`) so different staff keep independent filter preferences
+- SSE reconnect: on backend restart the `connected` event bumps `lastConnectedAt`, which triggers an automatic orders reload in the view
 
 ---
 
-## 5. Observability & monitoring
+## 5. Observability
 
-- **Metrics** (`MetricsService`):
-  - `orders.created`
-  - `orders.status.changed`
-  - `outbox.backlog`
-  - `outbox.dead`
-  - `outbox.publish.failed`
-  - `sse.connections`
-- **Health**:
-  - Custom `OutboxHealthIndicator` on `/api/actuator/health`
-  - Includes backlog and dead-letter counts
-- **Logging**:
-  - `MdcFilter` adds `traceId` for each request
-  - Business code enriches MDC with `tenantId` and `orderId`
-  - `logback-spring.xml` outputs structured, MDC-enriched logs
-- **Grafana dashboard**:
-  - Provisioned via `docker/grafana/provisioning`
-  - Panels for order rates, outbox backlog, dead letters, SSE connections, etc.
+- **Metrics** (`MetricsService`): `orders.created`, `orders.status.changed`, `outbox.backlog`, `outbox.dead`, `outbox.publish.failed`, `sse.connections`
+- **Health**: custom `OutboxHealthIndicator` at `/api/actuator/health` with backlog and dead-letter counts
+- **Logging**: `MdcFilter` injects `traceId` per request; business code adds `tenantId` and `orderId` to MDC; structured output via `logback-spring.xml`
+- **Grafana dashboard**: provisioned at startup — panels for order rate, outbox backlog, dead letters, active SSE connections
 
 ---
 
@@ -181,148 +174,99 @@ Frontend dev server:
 
 ### 6.1 Backend (JUnit + Spring Test)
 
-Run:
-
 ```bash
-cd backend
-mvn test
+cd backend && mvn test
 ```
 
-Tests are split into three layers:
+**Pure unit tests** (no Spring context):
+- `OrderStatusTest`, `OrderStateMachineTest` — enum and state machine logic
+- `UserRoleTest`, `JwtServiceTest`, `AuthConverterTest` — auth/JWT round-trips
 
-**Pure unit tests** (no Spring context, run on all JDKs):
+**Mocked unit tests** (Mockito; skipped on JDK 25+ due to ByteBuddy):
+- `OrderServiceTest`, `OrderControllerTest` — service logic and REST contract
+- `RestaurantServiceTest` — CRUD routing, duplicate-name handling
+- `JwtPrincipalConverterTest` — token claim conversion
 
-- `OrderStatusTest` — `fromCode` / `tryFromCode` behaviour (valid, null, invalid)
-- `OrderStateMachineTest` — valid and invalid transitions, null handling
-- `UserRoleTest` — `fromCode`, `fromName`, round-trip for all roles
-- `JwtServiceTest` — generate + validate + buildPrincipal round-trip; tampered/expired token errors
-- `AuthConverterTest` — `toLoginResponse` for all four role codes
-
-**Mocked unit tests** (Mockito; **skipped on JDK 25+** due to ByteBuddy incompatibility):
-
-- `OrderServiceTest` — `list` with multi-status filters and invalid codes
-- `OrderControllerTest` — REST contract, `status=1&status=4` passed as list
-- `JwtPrincipalConverterTest` — `toClaimValues` / `toPrincipal` for both user types
-- `RestaurantServiceTest` — full CRUD routing (findAll / findByStatus / findByName combos, duplicate name, not found)
-
-**Integration tests** (Testcontainers, real PostgreSQL 15 + Redis 7; skipped when Docker unavailable locally, **runs in CI**):
-
-- `RestaurantServiceIntegrationTest` — Flyway migration, JPA AttributeConverter (status as INTEGER), duplicate-name constraint, pagination filters, full CRUD round-trip
+**Integration tests** (Testcontainers, real PostgreSQL 15 + Redis 7; runs in CI):
+- `RestaurantServiceIntegrationTest` — Flyway migration, JPA `AttributeConverter`, full CRUD round-trip
 
 ### 6.2 Frontend (Vitest + Vue Test Utils)
 
-Run:
-
 ```bash
-cd frontend
-npm run test:run
+cd frontend && npm run test:run
 ```
 
-**API layer** (`src/api/`):
-
-- `orders.test.js` — URL building for `getOrders` (multi-status, pagination); payload and HTTP method for `updateOrderStatus`
-- `auth.test.js` — `login` (POST body), `getProfile`, `changePassword`
-- `restaurants.test.js` — URL building with filters; CRUD methods (create, update, delete)
-- `menu.test.js` — categories CRUD, menu items with status/category filters, `updateMenuItemStatus`
-- `tables.test.js` — tables CRUD, checkout summary and checkout call
-
-**Composables**:
-
-- `useOrderEvents.test.js` — composable shape (`lastOrderEvent`, `setRestaurantIdForSse`); no real SSE opened in tests
-
-**Components**:
-
-- `LoginView.test.js` — renders all inputs; validation (empty username/password); successful login stores token in sessionStorage and navigates; 401/network error display; button re-enabled after failure
+- **API layer**: `orders`, `auth`, `restaurants`, `menu`, `tables` — URL building, HTTP methods, payloads
+- **Composables**: `useOrderEvents` — shape and no-SSE-in-tests contract
+- **Components**: `LoginView` — rendering, validation, success/error flows
 
 ---
 
 ## 7. Project structure
 
-```text
-backend/
-  src/main/java/com/qrordering/...
-    auth/          # Auth, security, JWT, user roles (platform admin + restaurant staff)
-    restaurant/    # Restaurant CRUD and tenant management
-    menu/          # Menu categories & items
-    table/         # Tables, QR code generation, checkout
-    order/         # Orders, state machine, idempotency, services, controllers
-    publicapi/     # Public (unauthenticated) customer API for QR-scan ordering
-    event/         # Outbox entities, repositories, processor, Redis publisher/subscriber
-    sse/           # SSE controller and emitter manager
-    storage/       # MinIO image upload (logo, dish photos)
-    observability/ # Metrics, health indicator, MDC filter
-    common/        # Shared exceptions, DTOs, global exception handler
-    config/        # Web, filters, properties
-  src/main/resources/
-    application.yml
-    db/migration/   # Flyway migrations
-    logback-spring.xml
+```
+backend/src/main/java/com/qrordering/
+  auth/          # JWT, security config, user roles
+  restaurant/    # Restaurant CRUD, tenant management
+  menu/          # Categories & menu items
+  table/         # Tables, QR code generation, checkout
+  order/         # Orders, state machine, idempotency
+  publicapi/     # Unauthenticated customer API (QR scan)
+  event/         # Outbox entities, processor, Redis publisher/consumer
+  sse/           # SSE controller and emitter manager
+  storage/       # MinIO image upload
+  observability/ # Metrics, health indicator, MDC filter
+  common/        # Exceptions, DTOs, global exception handler
 
-frontend/
-  src/
-    api/            # HTTP clients (orders, restaurants, auth, etc.)
-    composables/    # `useOrderEvents`
-    layouts/        # Dashboard layout with role-based navigation
-    views/          # Screens (Orders, Restaurants, Staff, etc.)
-    router/         # Vue Router
+frontend/src/
+  api/           # HTTP clients
+  composables/   # useOrderEvents (global SSE)
+  layouts/       # Role-based dashboard layout
+  views/         # All screens
+  router/        # Vue Router with role guards
 
 docker/
-  prometheus/prometheus.yml
-  grafana/provisioning/...
+  prometheus/    # Prometheus config
+  grafana/       # Provisioned datasource + dashboard JSON
 ```
 
 ---
 
-## 8. Demo script (for interviews)
+## 8. Demo walkthrough
 
-### Setup (< 2 min)
+### Start
 
-**Option A — Docker only (recommended for demos):**
 ```bash
-docker-compose up -d --build
+docker-compose up -d
 # Frontend: http://localhost  |  Grafana: http://localhost:3001
 ```
 
-**Option B — local dev (hot-reload):**
-```bash
-docker-compose -f docker-compose.dev.yml up -d   # infra + monitoring
-cd backend && mvn spring-boot:run &               # http://localhost:8080
-cd frontend && npm run dev                        # http://localhost:5173
-```
+### Step 1 — Get the restaurant Tenant ID
 
-### Step 1 — Platform admin flow
+1. Go to http://localhost → login: **Tenant ID** `PLATFORM`, username `admin`, password `admin123`
+2. Go to **Restaurants** → copy the **ID** of Tokyo Sushi (e.g. `REST_abc123`)
 
-1. Open `http://localhost:5173` → Login with **Tenant ID: `PLATFORM`**, username `admin`, password `admin123`
-2. Go to **Restaurants** → Create a restaurant (e.g. "Demo Ramen")
-3. Go to **Platform Users** → Create a restaurant admin:
-   - Tenant ID: the restaurant ID shown in the list (e.g. `REST_…`)
-   - Role: `RESTAURANT_ADMIN`, username `owner`, password `owner123`
+### Step 2 — Open four tabs
 
-### Step 2 — Restaurant admin flow
+Each tab keeps its own session via `sessionStorage`.
 
-4. Open a **new browser tab** (sessionStorage isolates sessions per tab)
-5. Login with **Tenant ID: `REST_…`**, username `owner`, password `owner123`
-6. Go to **Menu** → add a category and at least two items
-7. Go to **Tables** → create a table (QR code auto-generated)
-8. Go to **Staff** → create a waiter (`waiter` / `waiter123`) and kitchen staff (`kitchen` / `kitchen123`)
+| Tab | Tenant ID | Username | Password |
+|-----|-----------|----------|----------|
+| Platform admin | `PLATFORM` | `admin` | `admin123` |
+| Restaurant admin | `REST_…` | `owner` | `owner123` |
+| Waiter | `REST_…` | `waiter` | `waiter123` |
+| Kitchen | `REST_…` | `kitchen` | `kitchen123` |
 
-### Step 3 — Multi-role real-time demo
+In the **restaurant admin tab**: go to **Tables** → copy the QR URL for T01 → open it in an incognito window (customer view).
 
-9. Open a **third tab** → Login as waiter (`REST_…` / `waiter` / `waiter123`)
-10. Open a **fourth tab** → Login as kitchen staff (`REST_…` / `kitchen` / `kitchen123`)
-11. In the **restaurant admin tab**, go to **Tables** → copy the QR URL for your table and open it in an incognito window (customer view)
-12. Place an order in the customer view. Observe:
-    - **Waiter tab**: toast "New order needs confirmation" appears in real time
-    - Waiter clicks **Confirm** → **Kitchen tab**: toast "Order confirmed, please prepare"
-    - Kitchen clicks **Ready** → **Waiter tab**: toast "Order ready, please serve"
+### Step 3 — Real-time order flow
 
-> The four tabs use separate sessionStorage, so each role stays logged in independently — no need for separate browsers.
+Place an order in the customer view:
+
+- **Waiter tab**: toast "New order needs confirmation" appears immediately
+- Waiter clicks **Confirm** → **Kitchen tab**: toast "Order confirmed, please prepare"
+- Kitchen clicks **Ready** → **Waiter tab**: toast "Order ready, please serve"
 
 ### Step 4 — Observability
 
-13. Open Grafana at `http://localhost:3001` (admin / admin) → **QR Ordering Platform** dashboard
-14. Place a few more orders and show panels reacting in real time:
-    - Order creation rate, status-change events
-    - Outbox backlog and dead-letter counters
-    - Active SSE connections
-
+Open Grafana at http://localhost:3001 → **QR Ordering Platform** dashboard. Place a few more orders and watch the panels update in real time: order rate, outbox backlog, dead-letter count, active SSE connections.

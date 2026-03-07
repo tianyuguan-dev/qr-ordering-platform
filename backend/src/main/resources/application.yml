@@ -107,3 +107,9 @@ platform:
     enabled: true
     username: admin
     password: admin123
+
+# Demo seed data: creates "Demo Ramen House" with staff/menu/tables on first startup.
+# Set demo.data.enabled=false in production.
+demo:
+  data:
+    enabled: true

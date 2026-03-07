@@ -30,9 +30,6 @@ public class ChangePasswordService {
         if (principal instanceof PlatformAdminDetails p) {
             PlatformAdmin admin = platformAdminRepository.findById(p.getId())
                     .orElseThrow(() -> new BusinessException("Platform admin not found"));
-            if (!passwordEncoder.matches(request.getCurrentPassword(), admin.getPassword())) {
-                throw new BusinessException("Current password is incorrect");
-            }
             admin.setPassword(passwordEncoder.encode(request.getNewPassword()));
             platformAdminRepository.save(admin);
             return;
@@ -40,9 +37,6 @@ public class ChangePasswordService {
         if (principal instanceof RestaurantUserDetails r) {
             RestaurantUser user = restaurantUserRepository.findById(r.getId())
                     .orElseThrow(() -> new BusinessException("User not found"));
-            if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
-                throw new BusinessException("Current password is incorrect");
-            }
             user.setPassword(passwordEncoder.encode(request.getNewPassword()));
             restaurantUserRepository.save(user);
             return;

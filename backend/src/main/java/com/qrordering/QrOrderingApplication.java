@@ -1,5 +1,6 @@
 package com.qrordering;
 
+import com.qrordering.auth.config.DemoDataProperties;
 import com.qrordering.auth.config.JwtProperties;
 import com.qrordering.auth.config.PlatformBootstrapProperties;
 import com.qrordering.config.CustomerBaseUrlProperties;
@@ -17,6 +18,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling  // Enable scheduled tasks for Outbox Processor
 @EnableConfigurationProperties({
     CustomerBaseUrlProperties.class,
+    DemoDataProperties.class,
     JwtProperties.class,
     PlatformBootstrapProperties.class
 })

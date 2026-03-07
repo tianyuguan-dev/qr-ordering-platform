@@ -1,12 +1,12 @@
 # Full-stack one-command startup (backend + frontend + all infrastructure)
-# Usage: docker-compose up -d --build
+# Usage: docker-compose up -d
 #
 # Services:
 #   Frontend:   http://localhost        (Vue SPA via Nginx)
 #   Backend:    http://localhost/api    (proxied by Nginx)
 #   Grafana:    http://localhost:3001   (admin / admin)
 #   Prometheus: http://localhost:9090
-#   MinIO:      http://localhost:9001   (minioadmin / minioadmin)
+#   MinIO:      http://localhost:9001   (console, minioadmin / minioadmin)
 
 version: '3.8'
 
@@ -40,15 +40,14 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
+      - "9000:9000"   # API (image access)
       - "9001:9001"   # Console
     volumes:
       - minio_data:/data
     restart: unless-stopped
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: tianyuguan/qr-ordering:backend
     container_name: qr-ordering-backend
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/qr_ordering
@@ -69,9 +68,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: tianyuguan/qr-ordering:frontend
     container_name: qr-ordering-frontend
     ports:
       - "80:80"

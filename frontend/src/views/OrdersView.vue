@@ -251,6 +251,16 @@ watch(
   { deep: true }
 )
 
+// Reload orders when SSE reconnects (may have missed events during backend downtime)
+watch(
+  () => orderEvents?.lastConnectedAt?.value,
+  (v) => {
+    if (v && effectiveRestaurantId.value) {
+      loadOrders()
+    }
+  }
+)
+
 function toggleStatus(code) {
   const idx = filterStatuses.value.indexOf(code)
   if (idx === -1) filterStatuses.value = [...filterStatuses.value, code]

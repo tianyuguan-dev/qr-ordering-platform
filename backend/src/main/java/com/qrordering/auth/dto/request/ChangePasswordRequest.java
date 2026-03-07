@@ -18,10 +18,6 @@ import lombok.NoArgsConstructor;
 @Schema(description = "Change password request")
 public class ChangePasswordRequest {
 
-    @NotBlank(message = "Current password is required")
-    @Schema(description = "Current password", requiredMode = Schema.RequiredMode.REQUIRED)
-    private String currentPassword;
-
     @NotBlank(message = "New password is required")
     @Size(min = 6, max = 128, message = "New password must be between 6 and 128 characters")
     @Schema(description = "New password", requiredMode = Schema.RequiredMode.REQUIRED)

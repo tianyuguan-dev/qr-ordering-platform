@@ -277,13 +277,16 @@ watch(effectiveRestaurantId, (val) => {
         <ul v-else class="table-list">
           <li v-for="t in list" :key="t.id" class="table-row">
             <div class="table-qr">
-              <img v-if="qrImageUrl(t)" :src="qrImageUrl(t)" alt="Table QR" class="qr-img" />
+              <a v-if="qrImageUrl(t)" :href="t.qrCodeUrl" target="_blank" rel="noopener" class="qr-link" title="Open ordering page">
+                <img :src="qrImageUrl(t)" alt="Table QR" class="qr-img" />
+              </a>
               <span v-else class="qr-placeholder">QR</span>
             </div>
             <span class="table-num">{{ t.tableNumber }}</span>
             <span class="table-seats">{{ t.seats }} seats</span>
             <span class="table-status">{{ statusLabel(t.status) }}</span>
             <div class="row-actions">
+              <a v-if="t.qrCodeUrl" :href="t.qrCodeUrl" target="_blank" rel="noopener" class="btn small secondary">Open</a>
               <button type="button" class="btn small primary" @click="openCheckout(t)">Checkout</button>
               <button v-if="canEditTables" type="button" class="btn small secondary" @click="openEdit(t)">Edit</button>
               <button v-if="canEditTables" type="button" class="btn small danger" @click="askDelete(t)">Delete</button>
@@ -459,10 +462,20 @@ watch(effectiveRestaurantId, (val) => {
   background: #f5f5f5;
   border-radius: 6px;
 }
+.table-qr .qr-link {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
 .table-qr .qr-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  border-radius: 4px;
+  transition: opacity 0.15s;
+}
+.table-qr .qr-link:hover .qr-img {
+  opacity: 0.75;
 }
 .table-qr .qr-placeholder {
   font-size: 0.7rem;

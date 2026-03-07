@@ -15,6 +15,9 @@ let currentRestaurantId = null
 // Last event for subscribers (e.g. OrdersView refreshes list)
 const lastOrderEvent = ref(null)
 
+// Bumped on every successful SSE connect so OrdersView can reload on reconnect
+const lastConnectedAt = ref(null)
+
 function getRole() {
   try {
     const user = JSON.parse(sessionStorage.getItem('user') || 'null')
@@ -40,6 +43,7 @@ function connect(rid) {
 
   eventSource.addEventListener('connected', () => {
     toast('Real-time updates connected')
+    lastConnectedAt.value = Date.now()
   })
 
   eventSource.addEventListener('ORDER_CREATED', (e) => {
@@ -55,8 +59,11 @@ function connect(rid) {
     lastOrderEvent.value = { type: 'ORDER_STATUS_CHANGED', data }
     const role = getRole()
     const newStatus = data?.newStatus
+    const oldStatus = data?.oldStatus
     if (role === 'KITCHEN' && newStatus === 2) {
       toastAlert('Order confirmed, please prepare', 'warning')
+    } else if (role === 'KITCHEN' && newStatus === 7 && (oldStatus === 2 || oldStatus === 3)) {
+      toastAlert('Order cancelled, please discard', 'error')
     } else if ((role === 'WAITER' || role === 'RESTAURANT_ADMIN') && newStatus === 4) {
       toastAlert('Order ready, please serve', 'alert')
     }
@@ -95,7 +102,7 @@ function parseData(raw) {
  * Composable for global order SSE and role-based alert toasts.
  * - Layout should call setRestaurantIdForSse('me') for WAITER/KITCHEN/RESTAURANT_ADMIN.
  * - OrdersView should call setRestaurantIdForSse(effectiveRestaurantId) for PLATFORM_ADMIN.
- * Returns { lastOrderEvent, setRestaurantIdForSse }.
+ * Returns { lastOrderEvent, lastConnectedAt, setRestaurantIdForSse }.
  */
 export function useOrderEvents() {
   const stopWatch = watch(
@@ -115,6 +122,7 @@ export function useOrderEvents() {
 
   return {
     lastOrderEvent,
+    lastConnectedAt,
     setRestaurantIdForSse(id) {
       sseRestaurantId.value = id || null
     },

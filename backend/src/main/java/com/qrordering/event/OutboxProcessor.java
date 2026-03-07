@@ -2,6 +2,7 @@ package com.qrordering.event;
 
 import com.qrordering.event.entity.OutboxEvent;
 import com.qrordering.event.repository.OutboxEventRepository;
+import com.qrordering.event.repository.ProcessedEventRepository;
 import com.qrordering.observability.MetricsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,17 +35,15 @@ public class OutboxProcessor {
     private static final int MAX_ATTEMPTS = 5;
 
     private final OutboxEventRepository outboxEventRepository;
+    private final ProcessedEventRepository processedEventRepository;
     private final EventPublisher eventPublisher;
     private final MetricsService metricsService;
 
-    @Scheduled(fixedDelay = 10000) // 10 seconds
+    @Scheduled(fixedDelay = 2000) // 2 seconds
     @Transactional
     public void processOutbox() {
         List<OutboxEvent> events = outboxEventRepository
-                .findByStatusAndNextRetryAtBeforeOrNextRetryAtIsNullOrderByIdAsc(
-                        OutboxEvent.STATUS_NEW,
-                        Instant.now(),
-                        PageRequest.of(0, BATCH_SIZE));
+                .findReadyEvents(OutboxEvent.STATUS_NEW, Instant.now(), PageRequest.of(0, BATCH_SIZE));
 
         if (events.isEmpty()) {
             return;
@@ -57,6 +56,15 @@ public class OutboxProcessor {
     }
 
     private void processEvent(OutboxEvent event) {
+        // If the consumer already processed this event (e.g. backend crashed after Redis publish
+        // but before the DB transaction committed), just mark it SENT to stop re-publishing.
+        if (processedEventRepository.existsByEventId(event.getEventId())) {
+            event.setStatus(OutboxEvent.STATUS_SENT);
+            event.setProcessedAt(Instant.now());
+            outboxEventRepository.save(event);
+            log.debug("Outbox event {} already consumed — marked SENT", event.getEventId());
+            return;
+        }
         try {
             event.setStatus(OutboxEvent.STATUS_PROCESSING);
             outboxEventRepository.save(event);

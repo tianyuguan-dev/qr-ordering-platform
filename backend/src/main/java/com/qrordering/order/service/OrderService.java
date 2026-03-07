@@ -441,13 +441,24 @@ public class OrderService {
         List<OrderInfo> activeOrders = orderInfoRepository.findByTenantIdAndTableIdAndStatusInOrderByCreatedAtAsc(
                 tenantId, tableId, ACTIVE_ORDER_STATUSES);
         for (OrderInfo order : activeOrders) {
-            if (order.getStatus() == OrderStatus.SERVED) {
-                order.setStatus(OrderStatus.COMPLETED);
+            OrderStatus oldStatus = order.getStatus();
+            OrderStatus newStatus;
+            if (oldStatus == OrderStatus.SERVED) {
+                newStatus = OrderStatus.COMPLETED;
             } else {
-                orderStateMachine.validateTransition(order.getStatus(), OrderStatus.CANCELLED);
-                order.setStatus(OrderStatus.CANCELLED);
+                orderStateMachine.validateTransition(oldStatus, OrderStatus.CANCELLED);
+                newStatus = OrderStatus.CANCELLED;
             }
+            order.setStatus(newStatus);
             orderInfoRepository.save(order);
+            OrderStatusChangedEventPayload statusPayload = OrderStatusChangedEventPayload.builder()
+                    .tenantId(tenantId)
+                    .orderId(order.getId())
+                    .oldStatus(oldStatus.getCode())
+                    .newStatus(newStatus.getCode())
+                    .occurredAt(Instant.now())
+                    .build();
+            outboxService.publish("OrderStatusChangedEvent", tenantId, order.getId(), statusPayload);
         }
         TableInfo table = tableInfoRepository.findById(tableId).orElseThrow();
         if (table.getStatus() == TableStatus.OCCUPIED) {

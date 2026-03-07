@@ -6,7 +6,7 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.SetBucketPolicyArgs;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -18,7 +18,7 @@ import java.util.UUID;
  * Bucket is created if missing and set to public read for stored objects.
  */
 @Service
-@ConditionalOnBean(MinioClient.class)
+@ConditionalOnProperty(name = "minio.endpoint")
 public class MinioService {
 
     private static final long MAX_SIZE = 5 * 1024 * 1024; // 5MB
@@ -58,6 +58,31 @@ public class MinioService {
             bucketEnsured = true;
         } catch (Exception e) {
             throw new RuntimeException("Failed to ensure MinIO bucket: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Upload an image from an InputStream (e.g. classpath resource). No size/type validation.
+     *
+     * @param inputStream image stream
+     * @param size        content length in bytes
+     * @param contentType MIME type (e.g. "image/png")
+     * @param objectName  full object path within the bucket (e.g. "logos/sushi.png")
+     * @return public URL of the stored object
+     */
+    public String uploadStream(InputStream inputStream, long size, String contentType, String objectName) {
+        ensureBucket();
+        try {
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(props.getBucket())
+                    .object(objectName)
+                    .stream(inputStream, size, -1)
+                    .contentType(contentType)
+                    .build());
+            String base = props.getPublicUrl().replaceAll("/$", "");
+            return base + "/" + props.getBucket() + "/" + objectName;
+        } catch (Exception e) {
+            throw new RuntimeException("Upload failed: " + e.getMessage(), e);
         }
     }
 

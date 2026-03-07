@@ -1,7 +1,7 @@
 package com.qrordering.storage.controller;
 
 import com.qrordering.storage.service.MinioService;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,7 +16,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/upload")
-@ConditionalOnBean(MinioService.class)
+@ConditionalOnProperty(name = "minio.endpoint")
 public class UploadController {
 
     private final MinioService minioService;

@@ -8,7 +8,7 @@ const router = useRouter()
 const profile = ref(null)
 const loading = ref(false)
 const error = ref('')
-const pwForm = ref({ currentPassword: '', newPassword: '' })
+const pwForm = ref({ newPassword: '' })
 const pwError = ref('')
 const pwSuccess = ref('')
 const pwLoading = ref(false)
@@ -34,8 +34,8 @@ async function loadProfile() {
 async function submitPassword() {
   pwError.value = ''
   pwSuccess.value = ''
-  if (!pwForm.value.currentPassword || !pwForm.value.newPassword) {
-    pwError.value = 'Current and new password are required'
+  if (!pwForm.value.newPassword) {
+    pwError.value = 'New password is required'
     return
   }
   if (pwForm.value.newPassword.length < 6) {
@@ -44,11 +44,8 @@ async function submitPassword() {
   }
   pwLoading.value = true
   try {
-    await changePassword({
-      currentPassword: pwForm.value.currentPassword,
-      newPassword: pwForm.value.newPassword,
-    })
-    pwForm.value = { currentPassword: '', newPassword: '' }
+    await changePassword({ newPassword: pwForm.value.newPassword })
+    pwForm.value = { newPassword: '' }
     pwSuccess.value = 'Password changed successfully.'
   } catch (e) {
     pwError.value = e.message || 'Failed to change password'
@@ -86,10 +83,6 @@ onMounted(loadProfile)
       <div class="profile-card">
         <h2>Change Password</h2>
         <form @submit.prevent="submitPassword" class="pw-form">
-          <div class="field">
-            <label>Current password <span class="required">*</span></label>
-            <input v-model="pwForm.currentPassword" type="password" placeholder="Current password" />
-          </div>
           <div class="field">
             <label>New password <span class="required">*</span></label>
             <input v-model="pwForm.newPassword" type="password" placeholder="Min 6 characters" />
