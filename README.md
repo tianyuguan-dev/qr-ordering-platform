@@ -60,7 +60,7 @@ Customer (browser)          Staff (browser)
 Requires only Docker + Docker Compose — no JDK or Node.js needed.
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 Images are pre-built and pulled from Docker Hub. All services start in ~30 seconds.
@@ -89,7 +89,7 @@ Images are pre-built and pulled from Docker Hub. All services start in ~30 secon
 
 ```bash
 # Start only infra (postgres, redis, minio, prometheus, grafana)
-docker-compose up -d postgres redis minio prometheus grafana
+docker compose up -d postgres redis minio prometheus grafana
 ```
 
 | Service | Local address |
@@ -225,9 +225,6 @@ frontend/src/
   views/         # All screens
   router/        # Vue Router with role guards
 
-docker/
-  prometheus/    # Prometheus config
-  grafana/       # Provisioned datasource + dashboard JSON
 ```
 
 ---
@@ -237,7 +234,7 @@ docker/
 ### Start
 
 ```bash
-docker-compose up -d
+docker compose up -d
 # Frontend: http://localhost  |  Grafana: http://localhost:3001
 ```
 
@@ -257,7 +254,7 @@ Each tab keeps its own session via `sessionStorage`.
 | Waiter | `REST_…` | `waiter` | `waiter123` |
 | Kitchen | `REST_…` | `kitchen` | `kitchen123` |
 
-In the **restaurant admin tab**: go to **Tables** → copy the QR URL for T01 → open it in an incognito window (customer view).
+In the **restaurant admin tab**: go to **Tables** → click **Customer view** on any table row → the ordering page opens in a new tab (no phone needed).
 
 ### Step 3 — Real-time order flow
 
