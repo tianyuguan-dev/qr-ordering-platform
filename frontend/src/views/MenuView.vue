@@ -527,10 +527,10 @@ watch(effectiveRestaurantId, (val) => {
               <td>{{ item.price != null ? Number(item.price).toFixed(2) : '—' }}</td>
               <td>{{ statusLabel(item.status) }}</td>
               <td class="actions">
-                <template v-if="canEditMenu">
+                <div v-if="canEditMenu" class="row-actions">
                   <button type="button" class="btn small secondary" @click="openItemEdit(item)">Edit</button>
                   <button type="button" class="btn small danger" @click="confirmDeleteItem(item)">Delete</button>
-                </template>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -820,6 +820,10 @@ watch(effectiveRestaurantId, (val) => {
 }
 .table td.actions {
   white-space: nowrap;
+}
+.table td.actions .row-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 .item-thumb {
   width: 48px;

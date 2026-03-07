@@ -1,4 +1,4 @@
-# Full-stack one-command startup (backend + frontend + all infrastructure)
+# Full-stack one-command startup — no other files needed
 # Usage: docker-compose up -d
 #
 # Services:
@@ -7,8 +7,6 @@
 #   Grafana:    http://localhost:3001   (admin / admin)
 #   Prometheus: http://localhost:9090
 #   MinIO:      http://localhost:9001   (console, minioadmin / minioadmin)
-
-version: '3.8'
 
 services:
   postgres:
@@ -40,8 +38,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"   # API (image access)
-      - "9001:9001"   # Console
+      - "9000:9000"
+      - "9001:9001"
     volumes:
       - minio_data:/data
     restart: unless-stopped
@@ -79,8 +77,9 @@ services:
   prometheus:
     image: prom/prometheus:v2.47.0
     container_name: qr-ordering-prometheus
-    volumes:
-      - ./docker/prometheus/prometheus.docker.yml:/etc/prometheus/prometheus.yml:ro
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -99,8 +98,14 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: http://localhost:3001
+    configs:
+      - source: grafana_datasource
+        target: /etc/grafana/provisioning/datasources/datasource.yml
+      - source: grafana_dashboard_provider
+        target: /etc/grafana/provisioning/dashboards/dashboard.yml
+      - source: grafana_dashboard_json
+        target: /etc/grafana/provisioning/dashboards/qr-ordering-dashboard.json
     volumes:
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
     ports:
       - "3001:3000"
@@ -116,3 +121,150 @@ volumes:
 networks:
   default:
     name: qr-ordering-network
+
+configs:
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+      scrape_configs:
+        - job_name: 'qr-ordering'
+          metrics_path: '/api/actuator/prometheus'
+          static_configs:
+            - targets: ['backend:8080']
+              labels:
+                app: 'qr-ordering'
+
+  grafana_datasource:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: prometheus
+          type: prometheus
+          access: proxy
+          url: http://prometheus:9090
+          isDefault: true
+          editable: false
+
+  grafana_dashboard_provider:
+    content: |
+      apiVersion: 1
+      providers:
+        - name: 'QR Ordering'
+          orgId: 1
+          folder: ''
+          folderUid: 'qr-ordering'
+          type: file
+          disableDeletion: false
+          updateIntervalSeconds: 30
+          allowUiUpdates: true
+          options:
+            path: /etc/grafana/provisioning/dashboards
+
+  grafana_dashboard_json:
+    content: |
+      {
+        "annotations": { "list": [] },
+        "editable": true,
+        "fiscalYearStartMonth": 0,
+        "graphTooltip": 0,
+        "id": null,
+        "links": [],
+        "liveNow": false,
+        "panels": [
+          {
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+            "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+            "id": 1,
+            "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+            "targets": [{ "expr": "rate(orders_created_total[5m]) * 60", "legendFormat": "orders/min", "refId": "A" }],
+            "title": "Orders created (per min)",
+            "type": "timeseries"
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+            "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+            "id": 2,
+            "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+            "targets": [{ "expr": "rate(orders_status_changed_total[5m]) * 60", "legendFormat": "status changes/min", "refId": "A" }],
+            "title": "Order status changes (per min)",
+            "type": "timeseries"
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 10000 }] }, "unit": "short" }, "overrides": [] },
+            "gridPos": { "h": 6, "w": 4, "x": 12, "y": 0 },
+            "id": 3,
+            "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+            "targets": [{ "expr": "outbox_backlog", "refId": "A" }],
+            "title": "Outbox backlog",
+            "type": "stat"
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "short" }, "overrides": [] },
+            "gridPos": { "h": 6, "w": 4, "x": 16, "y": 0 },
+            "id": 4,
+            "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+            "targets": [{ "expr": "outbox_dead", "refId": "A" }],
+            "title": "Outbox dead letters",
+            "type": "stat"
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+            "gridPos": { "h": 6, "w": 4, "x": 20, "y": 0 },
+            "id": 5,
+            "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+            "targets": [{ "expr": "sse_connections", "refId": "A" }],
+            "title": "SSE connections",
+            "type": "stat"
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+            "gridPos": { "h": 6, "w": 12, "x": 0, "y": 6 },
+            "id": 6,
+            "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+            "targets": [{ "expr": "outbox_backlog", "legendFormat": "backlog", "refId": "A" }],
+            "title": "Outbox backlog (over time)",
+            "type": "timeseries"
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+            "gridPos": { "h": 6, "w": 12, "x": 12, "y": 6 },
+            "id": 7,
+            "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+            "targets": [{ "expr": "sse_connections", "legendFormat": "connections", "refId": "A" }],
+            "title": "SSE connections (over time)",
+            "type": "timeseries"
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
+            "gridPos": { "h": 6, "w": 12, "x": 0, "y": 12 },
+            "id": 8,
+            "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+            "targets": [{ "expr": "rate(outbox_publish_failed_total[5m])", "legendFormat": "failures/sec", "refId": "A" }],
+            "title": "Outbox publish failures (rate)",
+            "type": "timeseries"
+          }
+        ],
+        "refresh": "10s",
+        "schemaVersion": 38,
+        "style": "dark",
+        "tags": ["qr-ordering"],
+        "templating": { "list": [] },
+        "time": { "from": "now-1h", "to": "now" },
+        "timepicker": {},
+        "timezone": "browser",
+        "title": "QR Ordering Platform",
+        "uid": "qr-ordering",
+        "version": 1,
+        "weekStart": ""
+      }

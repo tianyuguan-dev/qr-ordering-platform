@@ -286,7 +286,7 @@ watch(effectiveRestaurantId, (val) => {
             <span class="table-seats">{{ t.seats }} seats</span>
             <span class="table-status">{{ statusLabel(t.status) }}</span>
             <div class="row-actions">
-              <a v-if="t.qrCodeUrl" :href="t.qrCodeUrl" target="_blank" rel="noopener" class="btn small secondary">Open</a>
+              <a v-if="t.qrCodeUrl" :href="t.qrCodeUrl" target="_blank" rel="noopener" class="btn small secondary">Customer view</a>
               <button type="button" class="btn small primary" @click="openCheckout(t)">Checkout</button>
               <button v-if="canEditTables" type="button" class="btn small secondary" @click="openEdit(t)">Edit</button>
               <button v-if="canEditTables" type="button" class="btn small danger" @click="askDelete(t)">Delete</button>
@@ -393,7 +393,7 @@ watch(effectiveRestaurantId, (val) => {
 
 <style scoped>
 .tables-page {
-  max-width: 560px;
+  max-width: 860px;
   padding: 1.5rem;
 }
 .tables-page h1 {
@@ -488,6 +488,7 @@ watch(effectiveRestaurantId, (val) => {
 .table-seats {
   color: #666;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 .table-status {
   flex: 1;

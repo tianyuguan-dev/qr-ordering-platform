@@ -112,6 +112,13 @@ function statusLabel(code) {
   return STATUS_LIST.find((s) => s.code === code)?.label ?? code
 }
 
+function formatTime(ts) {
+  if (!ts) return ''
+  // Backend returns LocalDateTime without timezone — append Z to treat as UTC
+  const utcTs = /Z|[+-]\d{2}:\d{2}$/.test(ts) ? ts : ts + 'Z'
+  return new Date(utcTs).toLocaleString('en-NZ', { timeZone: 'Pacific/Auckland', hour12: false })
+}
+
 function nextStatusMap() {
   const role = user.value?.roleName
   if (role === 'WAITER') return NEXT_STATUS_WAITER
@@ -344,7 +351,7 @@ watch(filterStatuses, () => {
                 <span class="order-table">Table {{ o.tableNumber || o.tableId }}</span>
                 <span class="order-status" :class="'status-' + o.status">{{ statusLabel(o.status) }}</span>
                 <span class="order-amount">¥{{ o.totalAmount }}</span>
-                <span class="order-time">{{ o.createdAt ? new Date(o.createdAt).toLocaleString() : '' }}</span>
+                <span class="order-time">{{ formatTime(o.createdAt) }}</span>
               </div>
               <div class="order-actions">
                 <button type="button" class="btn small secondary" @click="openDetail(o)">Detail</button>
@@ -393,7 +400,7 @@ watch(filterStatuses, () => {
             <p><strong>Order #</strong> {{ detailOrder.orderNumber }}</p>
             <p><strong>Table</strong> {{ detailOrder.tableNumber || detailOrder.tableId }}</p>
             <p><strong>Status</strong> <span :class="'order-status status-' + detailOrder.status">{{ statusLabel(detailOrder.status) }}</span></p>
-            <p><strong>Created</strong> {{ detailOrder.createdAt ? new Date(detailOrder.createdAt).toLocaleString() : '' }}</p>
+            <p><strong>Created</strong> {{ formatTime(detailOrder.createdAt) }}</p>
             <p v-if="detailOrder.customerNotes"><strong>Notes</strong> {{ detailOrder.customerNotes }}</p>
           </div>
           <ul class="detail-items">
